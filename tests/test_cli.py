@@ -270,3 +270,28 @@ def test_a_position_must_have_a_column(
     )
     assert code == 2
     assert "PATH:LINE:COLUMN or PATH:NAME" in capfd.readouterr().err
+
+
+def test_callees_of_many_queries_use_one_call_graph_and_keep_errors_per_query(
+    cli: Any,
+) -> None:
+    graph = PROJECT / "shop" / "graph.py"
+    top, leaf = at(find(graph, "top()")), at(find(graph, "leaf()"))
+    nope = f"{PROJECT}/nope.py:1:1"
+    code, out = cli("callees", top, nope, leaf, "--all")
+    assert code == 1
+    assert out[1]["error"] == f"file not found: {PROJECT}/nope.py"
+    # The others are the same as asking for each alone.
+    for entry, query in ((out[0], top), (out[2], leaf)):
+        _, alone = cli("callees", query, "--all")
+        assert entry["result"] == alone[0]["result"]
+    assert len(out[0]["result"]) == 4
+
+
+def test_callees_without_all_are_direct_only(cli: Any) -> None:
+    top = at(find(PROJECT / "shop" / "graph.py", "top()"))
+    _, direct = cli("callees", top)
+    _, depth_one = cli("callees", top, "--max-depth", "1")
+    _, everything = cli("callees", top, "--all")
+    assert direct == depth_one
+    assert len(direct[0]["result"]) == 2 < len(everything[0]["result"])

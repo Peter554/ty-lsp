@@ -1,6 +1,6 @@
 """Helpers shared by all the queries."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 import pydantic
@@ -112,6 +112,17 @@ def prepare_hierarchy(lsp: TyLSP, method: str, query: Location) -> list[RawItem]
     """
     items: Any = lsp._request(method, position_params(query))
     return RAW_OBJECTS.validate_python(items or [])
+
+
+def prepare_hierarchy_many(
+    lsp: TyLSP, method: str, queries: Sequence[Location]
+) -> list[list[RawItem]]:
+    """Like ``prepare_hierarchy`` for many queries, in one batch and the same order.
+
+    Raises what ``capture`` turns into an ``Error``.
+    """
+    responses = lsp._request_many(method, [position_params(q) for q in queries])
+    return [RAW_OBJECTS.validate_python(items or []) for items in responses]
 
 
 def walk_breadth_first[E](

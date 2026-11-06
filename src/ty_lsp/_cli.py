@@ -32,11 +32,9 @@ import cyclopts
 import pydantic
 
 from ._common import Error, Location, Result
-from ._queries._calls._find_callees import (
-    Callee,
-    find_all_callees,
-    find_direct_callees,
-)
+from ._queries._calls._build_call_graph import build_call_graph
+from ._queries._calls._common import Callee
+from ._queries._calls._find_callees import find_all_callees
 from ._queries._calls._find_callers import (
     Caller,
     find_all_callers,
@@ -124,6 +122,21 @@ def resolve_target(lsp: TyLSP, target: Location | SymbolQuery) -> Result[Locatio
     else:
         return found[0]
     return Error(message, LookupError(message))
+
+
+def _callees_many(
+    lsp: TyLSP, queries: Sequence[Location], max_depth: int | None, within: Path | None
+) -> list[Result[Any]]:
+    """The callees of each query, from one call graph (which is much faster)."""
+    graph = build_call_graph(lsp, queries, max_depth=max_depth, within=within)
+    if isinstance(graph, Error):
+        # One of the queries failed (such as a file that does not exist). Ask one by
+        # one, to find which, and to still answer the others.
+        return [
+            find_all_callees(lsp, q, max_depth=max_depth, within=within)
+            for q in queries
+        ]
+    return [graph.callees_of(q) for q in queries]
 
 
 def _identity[Q](lsp: TyLSP, query: Q) -> Q:
@@ -238,11 +251,13 @@ def _run[Q, R](
     parse: Callable[[str], Q],
     resolve: Callable[[TyLSP, Q], Result[R]],
     query: Callable[[TyLSP, R], Result[Any]],
+    many: Callable[[TyLSP, Sequence[R]], Sequence[Result[Any]]] | None = None,
 ) -> int:
     """Run ``query`` for each input and print the output. Returns the exit code.
 
     The parsed input is turned into the query's input with ``resolve``, which can
-    fail for just that input.
+    fail for just that input. ``many`` can answer all the (resolved) inputs together,
+    if that is faster than one by one. It returns a result for each, in order.
     """
     try:
         texts = _read_queries(args, options)
@@ -253,12 +268,14 @@ def _run[Q, R](
     outcomes: list[tuple[str, Q | R, Result[Any]]] = []
     if parsed:
         with TyLSP(options.root, stderr=options.ty_stderr) as lsp:
-            for text, q in zip(texts, parsed, strict=True):
-                resolved = resolve(lsp, q)
+            resolutions = [resolve(lsp, q) for q in parsed]
+            ok = [r for r in resolutions if not isinstance(r, Error)]
+            answers = iter(many(lsp, ok) if many else [query(lsp, r) for r in ok])
+            for text, q, resolved in zip(texts, parsed, resolutions, strict=True):
                 if isinstance(resolved, Error):
                     outcomes.append((text, q, resolved))
                 else:
-                    outcomes.append((text, resolved, query(lsp, resolved)))
+                    outcomes.append((text, resolved, next(answers)))
     if options.format == "text":
         print(_render_text([(text, result) for text, _, result in outcomes]))
     else:
@@ -376,15 +393,16 @@ def callees(
     within
         Look up the callees of callees only inside this directory. Implies --all.
     """
-    if all or max_depth is not None or within is not None:
-        return _run(
-            queries,
-            options,
-            parse_target,
-            resolve_target,
-            lambda lsp, q: find_all_callees(lsp, q, max_depth=max_depth, within=within),
-        )
-    return _run(queries, options, parse_target, resolve_target, find_direct_callees)
+    if not (all or max_depth is not None or within is not None):
+        max_depth = 1
+    return _run(
+        queries,
+        options,
+        parse_target,
+        resolve_target,
+        lambda lsp, q: find_all_callees(lsp, q, max_depth=max_depth, within=within),
+        many=lambda lsp, qs: _callees_many(lsp, qs, max_depth, within),
+    )
 
 
 @app.command

@@ -12,7 +12,9 @@ are ``Location``s (1-based), and each query returns its result or an ``Error``::
 """
 
 from ._common import Error, Location, Result
-from ._queries._calls._find_callees import Callee, find_all_callees, find_direct_callees
+from ._queries._calls._build_call_graph import CallGraph, build_call_graph
+from ._queries._calls._common import Callee
+from ._queries._calls._find_callees import find_all_callees, find_direct_callees
 from ._queries._calls._find_callers import Caller, find_all_callers, find_direct_callers
 from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_type_definition import find_type_definition
@@ -44,6 +46,7 @@ __all__ = [  # noqa: RUF022 (ordered for the docs)
     "find_all_callers",
     "find_direct_callees",
     "find_all_callees",
+    "build_call_graph",
     "find_direct_subtypes",
     "find_all_subtypes",
     "find_direct_supertypes",
@@ -53,6 +56,7 @@ __all__ = [  # noqa: RUF022 (ordered for the docs)
     "Symbol",
     "Caller",
     "Callee",
+    "CallGraph",
     "Subtype",
     "Supertype",
     "Location",

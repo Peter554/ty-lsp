@@ -132,6 +132,8 @@ $ ty-lsp callers src/shop/pricing.py:12:5
 ### `callees`
 
 What each function, method or class calls, with the call sites.
+Give several queries and they share one call graph: a function below more than one
+is looked up only once.
 
 ```console
 $ ty-lsp callees src/shop/checkout.py:20:5

@@ -2,90 +2,17 @@
 
 from pathlib import Path
 
-import pydantic
-
-from ..._common import Frozen, Location, LspRange, Result, to_location
+from ..._common import Location, Result
 from ..._ty_lsp import TyLSP
-from .._common import (
-    RAW_OBJECTS,
-    HierarchyItem,
-    RawItem,
-    capture,
-    prepare_hierarchy,
-    walk_breadth_first,
-)
-
-
-class Callee(Frozen):
-    """A function, method or class that ``caller`` calls."""
-
-    name: str
-    location: Location
-    """Where the callee is defined (the position of its name)."""
-    caller: Location
-    """Where the calling function is defined (the position of its name)."""
-    call_sites: tuple[Location, ...]
-    """Where in the caller the callee is called."""
-
-
-class _OutgoingCall(pydantic.BaseModel):
-    to: HierarchyItem
-    from_ranges: list[LspRange] = pydantic.Field(alias="fromRanges")
-
-
-def _callees(caller: RawItem, outgoing: object) -> list[tuple[Callee, RawItem]]:
-    """Turn an ``outgoingCalls`` response for ``caller`` into one callee per definition.
-
-    Each callee comes with its hierarchy item, to find *its* callees with.
-    """
-    caller_item = HierarchyItem.model_validate(caller)
-    # Keyed by the callee's definition so a callee listed more than once is merged
-    # (dicts keep insertion order).
-    merged: dict[Location, tuple[RawItem, HierarchyItem, dict[Location, None]]] = {}
-    for raw_call in RAW_OBJECTS.validate_python(outgoing or []):
-        call = _OutgoingCall.model_validate(raw_call)
-        _, _, call_sites = merged.setdefault(
-            call.to.location, (raw_call["to"], call.to, {})
-        )
-        for r in call.from_ranges:
-            # The ranges are inside the caller, so in the caller's file.
-            call_sites[to_location(caller_item.uri, r.start)] = None
-    return [
-        (
-            Callee(
-                name=item.name,
-                location=location,
-                caller=caller_item.location,
-                call_sites=tuple(call_sites),
-            ),
-            raw,
-        )
-        for location, (raw, item, call_sites) in merged.items()
-    ]
-
-
-def _expand(lsp: TyLSP, callers: list[RawItem]) -> list[list[tuple[Callee, RawItem]]]:
-    """The direct callees of each caller, in the same order. Sends one batch."""
-    responses = lsp._request_many(
-        "callHierarchy/outgoingCalls", [{"item": caller} for caller in callers]
-    )
-    return [_callees(caller, r) for caller, r in zip(callers, responses, strict=True)]
+from .._common import capture
+from ._build_call_graph import build_graph
+from ._common import Callee
 
 
 def _find(
     lsp: TyLSP, query: Location, max_depth: int | None, within: Path | None
 ) -> tuple[Callee, ...]:
-    if within is not None:
-        within = within.resolve()
-    start = prepare_hierarchy(lsp, "textDocument/prepareCallHierarchy", query)
-    return tuple(
-        walk_breadth_first(
-            start,
-            lambda items: _expand(lsp, items),
-            max_depth=max_depth,
-            expand_only=lambda loc: within is None or loc.path.is_relative_to(within),
-        )
-    )
+    return build_graph(lsp, [query], max_depth, within).callees_of(query)
 
 
 def find_direct_callees(lsp: TyLSP, query: Location) -> Result[tuple[Callee, ...]]:
