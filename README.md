@@ -8,6 +8,17 @@ nothing else to install. Requires Python 3.13.
 Positions are `PATH:LINE:COLUMN`, with 1-based lines and columns, pointing at a name
 (its definition or any usage).
 
+## Installation
+
+```bash
+uv tool install --from git+https://github.com/Peter554/ty-lsp ty-lsp
+# or (suggested to create an alias)
+uvx --from git+https://github.com/Peter554/ty-lsp ty-lsp
+```
+
+To use it as a Python library, add it to a project instead:
+`uv add git+https://github.com/Peter554/ty-lsp`.
+
 ## CLI
 
 ```console
