@@ -1,20 +1,10 @@
 """End-to-end tests of ``go_to_definition`` against ``tests/fixture_project``."""
 
-from collections.abc import Iterator
-from pathlib import Path
+from py_call_linter import DefinitionQuery, Error, TyLSP, go_to_definition
 
-import pytest
+from ._support import PROJECT, find
 
-from py_call_linter import DefinitionQuery, Error, Location, TyLSP, go_to_definition
-
-PROJECT = Path(__file__).parent / "fixture_project"
 APP = PROJECT / "shop" / "app.py"
-
-
-@pytest.fixture(scope="module")
-def lsp() -> Iterator[TyLSP]:
-    with TyLSP(PROJECT) as lsp:
-        yield lsp
 
 
 def query(line_containing: str, name: str) -> DefinitionQuery:
@@ -25,16 +15,6 @@ def query(line_containing: str, name: str) -> DefinitionQuery:
                 path=APP, line=line_number, column=line.index(name) + 1
             )
     raise AssertionError(f"{line_containing!r} not found in {APP}")
-
-
-def find(path: Path, text: str) -> Location:
-    """The location of ``text`` (1-based) in the first line of ``path`` containing it."""
-    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
-        if text in line:
-            return Location(
-                path=path.resolve(), line=line_number, column=line.index(text) + 1
-            )
-    raise AssertionError(f"{text!r} not found in {path}")
 
 
 def test_function_imported_from_module(lsp: TyLSP) -> None:

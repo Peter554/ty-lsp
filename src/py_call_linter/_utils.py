@@ -1,5 +1,7 @@
 import dataclasses
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pydantic
 
@@ -15,6 +17,24 @@ class Location(Frozen):
 
     def __str__(self) -> str:
         return f"{self.path}:{self.line}:{self.column}"
+
+
+class LspPosition(pydantic.BaseModel):
+    line: int  # 0-based
+    character: int  # 0-based
+
+
+class LspRange(pydantic.BaseModel):
+    start: LspPosition
+
+
+def to_location(uri: str, position: LspPosition) -> Location:
+    """Convert an LSP uri and 0-based position to a 1-based ``Location``."""
+    return Location(
+        path=Path(url2pathname(urlparse(uri).path)),
+        line=position.line + 1,
+        column=position.character + 1,
+    )
 
 
 @dataclasses.dataclass(frozen=True)

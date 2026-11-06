@@ -25,9 +25,3 @@ dev = [
     "ruff>=0.17.4",
     "ty>=0.0.98",
 ]
-
-[tool.ty.src]
-exclude = ["tests/fixture_project"]
-
-[tool.ruff]
-extend-exclude = ["tests/fixture_project"]

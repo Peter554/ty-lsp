@@ -1,0 +1,16 @@
+from pathlib import Path
+
+from py_call_linter import Location
+
+PROJECT = (Path(__file__).parent / "fixture_project").resolve()
+
+
+def find(path: Path, text: str, *, nth: int = 1) -> Location:
+    """The location of ``text`` on the ``nth`` line of ``path`` containing it."""
+    matches = [
+        (number, line)
+        for number, line in enumerate(path.read_text().splitlines(), start=1)
+        if text in line
+    ]
+    number, line = matches[nth - 1]
+    return Location(path=path, line=number, column=line.index(text) + 1)
