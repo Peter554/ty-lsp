@@ -21,7 +21,7 @@ ty-lsp callers PATH:LINE:COLUMN           # Direct callers, with call sites
 ty-lsp callers PATH:LINE:COLUMN --all     # Direct and indirect callers
 ty-lsp callees PATH:LINE:COLUMN           # What it calls directly, with call sites
 ty-lsp callees PATH:LINE:COLUMN --within src   # Indirect callees, only expanding inside src/
-ty-lsp subtypes PATH:LINE:COLUMN          # Classes inheriting from a class
+ty-lsp subtypes PATH:LINE:COLUMN          # Classes in the project inheriting from a class
 ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 ```
 

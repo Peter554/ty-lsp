@@ -3,6 +3,7 @@
 import re
 
 from ty_lsp import (
+    Error,
     Location,
     Subtype,
     TyLSP,
@@ -10,7 +11,9 @@ from ty_lsp import (
     find_all_supertypes,
     find_direct_subtypes,
     find_direct_supertypes,
+    list_symbols,
 )
+from ty_lsp._queries._types._common import walk_hierarchy
 
 from ._support import PROJECT, find, name_in
 
@@ -98,3 +101,31 @@ def test_query_from_a_variable_uses_its_type(lsp: TyLSP) -> None:
 def test_non_class_position_is_empty(lsp: TyLSP) -> None:
     query = find(SHAPES, "def make_square")
     assert find_direct_subtypes(lsp, query) == ()
+
+
+def test_subtypes_match_ty_for_every_class_in_the_project(lsp: TyLSP) -> None:
+    """The fast ``implementation``-based search gives ty's own ``subtypes`` answer.
+
+    ty's ``typeHierarchy/subtypes`` is much slower, and also finds subclasses outside
+    the project, but the fixture classes have none of those.
+    """
+    for path in (SHAPES, USERS):
+        symbols = list_symbols(lsp, path)
+        assert not isinstance(symbols, Error)
+        for symbol in symbols:
+            slow = {
+                (e.name, e.location, e.origin)
+                for e in walk_hierarchy(lsp, symbol.location, "subtypes", None)
+            }
+            fast = find_all_subtypes(lsp, symbol.location)
+            assert not isinstance(fast, Error)
+            assert {(s.name, s.location, s.supertype) for s in fast} == slow
+
+
+def test_subtypes_of_a_stdlib_class_are_only_those_in_the_project(lsp: TyLSP) -> None:
+    """``Exception`` is defined in typeshed, and has many subclasses outside the project."""
+    at = name_in(USERS, "class ShapeError(Exception)", "Exception")
+    shape_error = find(USERS, "ShapeError")
+    for result in (find_direct_subtypes(lsp, at), find_all_subtypes(lsp, at)):
+        assert not isinstance(result, Error)
+        assert [(s.name, s.location) for s in result] == [("ShapeError", shape_error)]

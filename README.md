@@ -130,7 +130,8 @@ $ ty-lsp callees src/shop/checkout.py:20:5
 
 ### `subtypes`
 
-The classes that inherit from each class.
+The classes that inherit from each class. Only subclasses defined in the project are
+found, not those in the standard library or installed packages.
 
 ```console
 $ ty-lsp subtypes src/shop/shapes.py:5:7 --all

@@ -1,9 +1,9 @@
-"""Find the direct and indirect subtypes of a class using ty."""
+"""Find the direct and indirect subtypes of a class in the project, using ty."""
 
 from ..._common import Frozen, Location, Result
 from ..._ty_lsp import TyLSP
 from .._common import capture
-from ._common import walk_hierarchy
+from ._common import Edge, walk_subtypes
 
 
 class Subtype(Frozen):
@@ -16,19 +16,23 @@ class Subtype(Frozen):
     """Where the supertype is defined (the position of its name)."""
 
 
-def _find(lsp: TyLSP, query: Location, max_depth: int | None) -> tuple[Subtype, ...]:
+def _subtypes(edges: list[Edge]) -> tuple[Subtype, ...]:
     return tuple(
-        Subtype(name=e.name, location=e.location, supertype=e.origin)
-        for e in walk_hierarchy(lsp, query, "subtypes", max_depth)
+        Subtype(name=e.name, location=e.location, supertype=e.origin) for e in edges
     )
+
+
+def _find(lsp: TyLSP, query: Location, max_depth: int | None) -> tuple[Subtype, ...]:
+    return _subtypes(walk_subtypes(lsp, query, max_depth))
 
 
 def find_direct_subtypes(lsp: TyLSP, query: Location) -> Result[tuple[Subtype, ...]]:
     """Return the direct subtypes of the class at ``query``.
 
-    Subtypes are the classes that inherit from it directly. ``query`` can also be
-    a name whose inferred type is a class. The result is empty if there is no class
-    at that position.
+    Subtypes are the classes that inherit from it directly. Only those defined in
+    the project are found, not those in the standard library or installed packages.
+    ``query`` can also be a name whose inferred type is a class. The result is
+    empty if there is no class at that position.
     """
     return capture(_find, lsp, query, 1)
 
@@ -42,6 +46,9 @@ def find_all_subtypes(
     "``location`` is a direct subtype of ``supertype``". Edges come in breadth-first
     order. Each class is expanded once, but a class reached by several routes
     (multiple inheritance) appears once per edge.
+
+    Only subtypes defined in the project are found, not those in the standard
+    library or installed packages.
 
     ``max_depth`` limits how many levels are followed (``1`` is the same as
     ``find_direct_subtypes``); ``None`` follows them all.

@@ -344,7 +344,7 @@ def subtypes(
     max_depth: int | None = None,
     options: Options = _DEFAULT_OPTIONS,
 ) -> int:
-    """The classes that inherit from each class.
+    """The classes in the project that inherit from each class.
 
     Parameters
     ----------
