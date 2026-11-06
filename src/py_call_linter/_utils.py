@@ -28,6 +28,11 @@ class LspRange(pydantic.BaseModel):
     start: LspPosition
 
 
+class LspLocation(pydantic.BaseModel):
+    uri: str
+    range: LspRange
+
+
 def to_location(uri: str, position: LspPosition) -> Location:
     """Convert an LSP uri and 0-based position to a 1-based ``Location``."""
     return Location(

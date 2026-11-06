@@ -6,16 +6,11 @@ import pydantic
 
 from ._lsp import ResponseError
 from ._ty_lsp import TyLSP
-from ._utils import Error, Location, LspRange, Result, to_location
+from ._utils import Error, Location, LspLocation, LspRange, Result, to_location
 
 
 class DefinitionQuery(Location):
     """The position of a name whose definition to look up."""
-
-
-class _LspLocation(pydantic.BaseModel):
-    uri: str
-    range: LspRange
 
 
 class _LspLocationLink(pydantic.BaseModel):
@@ -23,12 +18,12 @@ class _LspLocationLink(pydantic.BaseModel):
     target_selection_range: LspRange = pydantic.Field(alias="targetSelectionRange")
 
 
-_LOCATIONS = pydantic.TypeAdapter(list[_LspLocation | _LspLocationLink])
+_LOCATIONS = pydantic.TypeAdapter(list[LspLocation | _LspLocationLink])
 
 
-def _to_location(location: _LspLocation | _LspLocationLink) -> Location:
+def _to_location(location: LspLocation | _LspLocationLink) -> Location:
     """Convert an LSP ``Location`` or ``LocationLink`` to a 1-based ``Location``."""
-    if isinstance(location, _LspLocation):
+    if isinstance(location, LspLocation):
         return to_location(location.uri, location.range.start)
     return to_location(location.target_uri, location.target_selection_range.start)
 
