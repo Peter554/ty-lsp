@@ -30,4 +30,4 @@ fix:
 
 # Serve docs
 doc:
-    @uv run pdoc py_call_linter
+    @uv run pdoc ty_lsp

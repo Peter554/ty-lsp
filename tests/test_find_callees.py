@@ -2,9 +2,8 @@
 
 from pathlib import Path
 
-from py_call_linter import (
+from ty_lsp import (
     Callee,
-    CalleeQuery,
     Error,
     Location,
     TyLSP,
@@ -25,8 +24,8 @@ def defined(name: str) -> Location:
     return name_in(GRAPH, f"def {name}(", name)
 
 
-def query(location: Location) -> CalleeQuery:
-    return CalleeQuery(**location.model_dump())
+def query(location: Location) -> Location:
+    return location
 
 
 def direct(lsp: TyLSP, name: str) -> tuple[Callee, ...]:

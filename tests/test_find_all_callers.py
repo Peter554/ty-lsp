@@ -1,7 +1,9 @@
 """End-to-end tests of ``find_all_callers`` against ``tests/fixture_project``."""
 
-from py_call_linter import (
-    CallerQuery,
+from collections import Counter
+from typing import Any, cast
+
+from ty_lsp import (
     Location,
     TyLSP,
     find_all_callers,
@@ -21,7 +23,7 @@ def defined(name: str) -> Location:
 
 def edges(lsp: TyLSP, name: str, **kwargs: int) -> list[tuple[Location, Location]]:
     """The (caller, callee) pairs from ``find_all_callers`` on ``name``."""
-    query = CallerQuery(**defined(name).model_dump())
+    query = defined(name)
     result = find_all_callers(lsp, query, **kwargs)
     assert isinstance(result, tuple), result
     return [(c.location, c.callee) for c in result]
@@ -47,7 +49,7 @@ def test_max_depth_limits_the_levels_followed(lsp: TyLSP) -> None:
 
 
 def test_depth_one_matches_find_direct_callers(lsp: TyLSP) -> None:
-    query = CallerQuery(**defined("leaf").model_dump())
+    query = defined("leaf")
     assert find_all_callers(lsp, query, max_depth=1) == find_direct_callers(lsp, query)
 
 
@@ -69,6 +71,33 @@ def test_no_callers(lsp: TyLSP) -> None:
 
 def test_query_from_a_usage(lsp: TyLSP) -> None:
     usage = find(GRAPH, "leaf()", nth=2)
-    result = find_all_callers(lsp, CallerQuery(**usage.model_dump()))
+    result = find_all_callers(lsp, usage)
     assert isinstance(result, tuple), result
     assert len(result) == 4
+
+
+class _CountingLSP:
+    """Wraps a ``TyLSP`` and counts the calls to ``_request`` and ``_request_many``."""
+
+    def __init__(self, inner: TyLSP) -> None:
+        self.inner = inner
+        self.single: Counter[str] = Counter()
+        self.batches: Counter[str] = Counter()
+
+    def _request(self, method: str, params: Any) -> Any:
+        self.single[method] += 1
+        return self.inner._request(method, params)
+
+    def _request_many(self, method: str, params_list: Any, *, window: int = 16) -> Any:
+        self.batches[method] += 1
+        return self.inner._request_many(method, params_list, window=window)
+
+
+def test_each_level_is_sent_as_one_batch(lsp: TyLSP) -> None:
+    counting = _CountingLSP(lsp)
+    query = defined("leaf")
+    result = find_all_callers(cast("TyLSP", counting), query)
+    assert isinstance(result, tuple)
+    assert counting.single["callHierarchy/incomingCalls"] == 0
+    # leaf -> (mid_a, mid_b) -> top: three levels, so three batches, not four requests.
+    assert counting.batches["callHierarchy/incomingCalls"] == 3

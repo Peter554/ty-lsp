@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from py_call_linter import (
+from ty_lsp import (
     Error,
     Location,
     Result,

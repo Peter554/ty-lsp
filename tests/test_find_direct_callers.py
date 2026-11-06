@@ -1,15 +1,10 @@
 """End-to-end tests of ``find_direct_callers`` against ``tests/fixture_project``."""
 
-from collections import Counter
-from typing import Any, cast
-
-from py_call_linter import (
+from ty_lsp import (
     Caller,
-    CallerQuery,
     Location,
     TyLSP,
     find_direct_callers,
-    find_direct_callers_many,
 )
 
 from ._support import PROJECT, find
@@ -19,8 +14,8 @@ PRICING = PROJECT / "shop" / "pricing.py"
 APP = PROJECT / "shop" / "app.py"
 
 
-def query_at(location: Location) -> CallerQuery:
-    return CallerQuery(path=location.path, line=location.line, column=location.column)
+def query_at(location: Location) -> Location:
+    return Location(path=location.path, line=location.line, column=location.column)
 
 
 def callers_of(lsp: TyLSP, location: Location) -> tuple[Caller, ...]:
@@ -67,40 +62,3 @@ def test_function_without_callers(lsp: TyLSP) -> None:
 
 def test_position_that_is_not_a_callable(lsp: TyLSP) -> None:
     assert callers_of(lsp, find(APP, "import shop")) == ()
-
-
-class _CountingLSP:
-    """Wraps a ``TyLSP`` and counts the requests sent, by method."""
-
-    def __init__(self, inner: TyLSP) -> None:
-        self.inner = inner
-        self.counts: Counter[str] = Counter()
-
-    def request(self, method: str, params: Any) -> Any:
-        self.counts[method] += 1
-        return self.inner.request(method, params)
-
-    def request_many(self, method: str, params_list: Any, *, window: int = 16) -> Any:
-        self.counts[method] += len(params_list)
-        return self.inner.request_many(method, params_list, window=window)
-
-
-def test_many_queries_are_the_same_as_joining_the_single_results(lsp: TyLSP) -> None:
-    make_item = query_at(find(MODELS, "make_item"))
-    label = query_at(find(MODELS, "label"))
-    singles = [find_direct_callers(lsp, q) for q in (make_item, label)]
-    assert all(isinstance(r, tuple) for r in singles)
-    expected = tuple(c for r in singles if isinstance(r, tuple) for c in r)
-    assert find_direct_callers_many(lsp, [make_item, label]) == expected
-
-
-def test_a_definition_given_several_times_is_looked_up_once(lsp: TyLSP) -> None:
-    make_item = query_at(find(MODELS, "make_item"))
-    counting = _CountingLSP(lsp)
-    result = find_direct_callers_many(cast("TyLSP", counting), [make_item] * 3)
-    assert result == find_direct_callers(lsp, make_item)
-    assert counting.counts["callHierarchy/incomingCalls"] == 1
-
-
-def test_no_queries(lsp: TyLSP) -> None:
-    assert find_direct_callers_many(lsp, []) == ()

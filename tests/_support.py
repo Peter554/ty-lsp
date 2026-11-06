@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from py_call_linter import Location
+from ty_lsp import Location
 
 PROJECT = (Path(__file__).parent / "fixture_project").resolve()
 

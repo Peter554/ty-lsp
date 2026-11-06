@@ -1,6 +1,6 @@
 """End-to-end tests of ``find_references`` against ``tests/fixture_project``."""
 
-from py_call_linter import Location, ReferenceQuery, TyLSP, find_references
+from ty_lsp import Location, TyLSP, find_references
 
 from ._support import PROJECT, name_in
 
@@ -13,7 +13,7 @@ CHECKOUT = PROJECT / "shop" / "checkout.py"
 
 
 def references(lsp: TyLSP, at: Location) -> set[Location]:
-    result = find_references(lsp, ReferenceQuery(**at.model_dump()))
+    result = find_references(lsp, at)
     assert isinstance(result, tuple), result
     assert list(result) == sorted(
         result, key=lambda loc: (str(loc.path), loc.line, loc.column)

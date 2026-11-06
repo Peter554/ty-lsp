@@ -1,19 +1,17 @@
 """End-to-end tests of ``go_to_definition`` against ``tests/fixture_project``."""
 
-from py_call_linter import DefinitionQuery, Error, TyLSP, go_to_definition
+from ty_lsp import Error, Location, TyLSP, go_to_definition
 
 from ._support import PROJECT, find
 
 APP = PROJECT / "shop" / "app.py"
 
 
-def query(line_containing: str, name: str) -> DefinitionQuery:
+def query(line_containing: str, name: str) -> Location:
     """Build a query for ``name`` on the first line of ``APP`` containing the text."""
     for line_number, line in enumerate(APP.read_text().splitlines(), start=1):
         if line_containing in line:
-            return DefinitionQuery(
-                path=APP, line=line_number, column=line.index(name) + 1
-            )
+            return Location(path=APP, line=line_number, column=line.index(name) + 1)
     raise AssertionError(f"{line_containing!r} not found in {APP}")
 
 
@@ -44,5 +42,5 @@ def test_undefined_name_has_no_definition(lsp: TyLSP) -> None:
 
 
 def test_position_outside_file_is_not_a_crash(lsp: TyLSP) -> None:
-    result = go_to_definition(lsp, DefinitionQuery(path=APP, line=999, column=1))
+    result = go_to_definition(lsp, Location(path=APP, line=999, column=1))
     assert result == () or isinstance(result, Error)

@@ -2,8 +2,8 @@
 
 import pytest
 
-from py_call_linter import TyLSP
-from py_call_linter._lsp import ResponseError
+from ty_lsp import TyLSP
+from ty_lsp._lsp import ResponseError
 
 from ._support import PROJECT, name_in
 
@@ -25,29 +25,29 @@ def definition_params() -> list[dict[str, object]]:
 
 def test_results_match_sending_the_requests_one_at_a_time(lsp: TyLSP) -> None:
     params = definition_params()
-    one_at_a_time = [lsp.request("textDocument/definition", p) for p in params]
-    assert lsp.request_many("textDocument/definition", params) == one_at_a_time
+    one_at_a_time = [lsp._request("textDocument/definition", p) for p in params]
+    assert lsp._request_many("textDocument/definition", params) == one_at_a_time
     assert any(result for result in one_at_a_time)
 
 
 @pytest.mark.parametrize("window", [1, 2, 64])
 def test_any_window_size_gives_the_same_results(lsp: TyLSP, window: int) -> None:
     params = definition_params() * 8  # more requests than the smaller windows
-    expected = [lsp.request("textDocument/definition", p) for p in params]
+    expected = [lsp._request("textDocument/definition", p) for p in params]
     assert (
-        lsp.request_many("textDocument/definition", params, window=window) == expected
+        lsp._request_many("textDocument/definition", params, window=window) == expected
     )
 
 
 def test_no_requests(lsp: TyLSP) -> None:
-    assert lsp.request_many("textDocument/definition", []) == []
+    assert lsp._request_many("textDocument/definition", []) == []
 
 
 def test_a_failing_request_raises_and_the_connection_stays_usable(lsp: TyLSP) -> None:
     with pytest.raises(ResponseError):
-        lsp.request_many("textDocument/notARealMethod", [{}, {}, {}])
+        lsp._request_many("textDocument/notARealMethod", [{}, {}, {}])
     # The failed responses were all consumed, so the next request is answered correctly.
     params = definition_params()
-    assert lsp.request_many("textDocument/definition", params) == [
-        lsp.request("textDocument/definition", p) for p in params
+    assert lsp._request_many("textDocument/definition", params) == [
+        lsp._request("textDocument/definition", p) for p in params
     ]

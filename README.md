@@ -1,12 +1,4 @@
-# py-call-linter
+# ty-lsp
 
-A linter for python function calls.
+A Python library for querying code with ty's language server.
 
-## TODO
-
-- ?generalise to references over calls
-- linter architecture
-- private functions
-- protected/internal functions (via decorator or comment annotation)
-- "usecases should not call other usecases"
-- add support for subclasses (not just calls)

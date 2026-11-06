@@ -1,6 +1,6 @@
 """End-to-end tests of ``list_symbols`` against ``tests/fixture_project``."""
 
-from py_call_linter import Error, TyLSP, list_symbols
+from ty_lsp import Error, TyLSP, list_symbols
 
 from ._support import PROJECT, find, name_in
 

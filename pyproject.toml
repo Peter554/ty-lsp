@@ -1,16 +1,14 @@
 [project]
-name = "py-call-linter"
+name = "ty-lsp"
 version = "0.1.0"
-description = "A linter for python function calls"
+description = "A Python library for querying code with ty's language server"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pydantic>=2.14.3",
+    "ty>=0.0.98",
 ]
 
-
-[project.scripts]
-py-call-linter = "py_call_linter._cli:main"
 
 
 [build-system]
@@ -23,5 +21,4 @@ dev = [
     "pdoc>=16.0.0",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
-    "ty>=0.0.98",
 ]
