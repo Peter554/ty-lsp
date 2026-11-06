@@ -1,5 +1,7 @@
 """Query Python code with ty's language server.
 
+[Source code and CLI documentation on GitHub](https://github.com/Peter554/ty-lsp).
+
 Start a ``TyLSP`` for a project, then pass it to the query functions. Positions
 are ``Location``s (1-based), and each query returns its result or an ``Error``::
 
