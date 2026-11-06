@@ -3,10 +3,11 @@
 Query Python code with [ty](https://github.com/astral-sh/ty)'s language server, from
 the command line or from Python. It answers questions like "where is this defined?",
 "who calls this?" and "what inherits from this class?". ty is bundled, so there is
-nothing else to install. Requires Python 3.13.
+nothing else to install. Requires Python >=3.13.
 
-Positions are `PATH:LINE:COLUMN`, with 1-based lines and columns, pointing at a name
-(its definition or any usage).
+- [CLI](https://github.com/Peter554/ty-lsp#cli)
+- [Claude Code Skill](https://github.com/Peter554/ty-lsp#claude-code)
+- [Python API](https://github.com/Peter554/ty-lsp#python-api)
 
 ## Installation
 
@@ -25,6 +26,8 @@ To use it as a Python library, add it to a project instead:
 $ ty-lsp callers src/shop/pricing.py:12:5 --all
 ```
 
+Positions are `PATH:LINE:COLUMN`, with 1-based lines and columns.
+
 One command per query. Each takes any number of queries as arguments, and can also
 read them from `--file FILE` or, with `--stdin`, from stdin (one per line; blank lines
 and `#` comments are skipped). These can be combined.
@@ -36,9 +39,9 @@ The output is a JSON list on stdout with one entry per query, in order:
   {
     "query": {
       "raw": "src/shop/app.py:6:12",
-      "parsed": {"path": "src/shop/app.py", "line": 6, "column": 12}
+      "parsed": { "path": "src/shop/app.py", "line": 6, "column": 12 }
     },
-    "result": [{"path": "src/shop/models.py", "line": 9, "column": 5}]
+    "result": [{ "path": "src/shop/models.py", "line": 9, "column": 5 }]
   }
 ]
 ```
@@ -61,13 +64,13 @@ A failed query prints `error: ...` and an empty one prints `(none)`.
 
 Options for all commands:
 
-| Option         | Meaning                                                  |
-| -------------- | -------------------------------------------------------- |
-| `--root DIR`   | The project directory (default: the current directory)   |
-| `--format`, `-f` | `json` (default) or `text`                             |
-| `--file FILE`  | Also read queries from a file                            |
-| `--stdin`      | Also read queries from stdin                             |
-| `--ty-stderr FILE` | Write ty's log to a file (default: discarded)        |
+| Option             | Meaning                                                |
+| ------------------ | ------------------------------------------------------ |
+| `--root DIR`       | The project directory (default: the current directory) |
+| `--format`, `-f`   | `json` (default) or `text`                             |
+| `--file FILE`      | Also read queries from a file                          |
+| `--stdin`          | Also read queries from stdin                           |
+| `--ty-stderr FILE` | Write ty's log to a file (default: discarded)          |
 
 Wherever a command takes a position it also takes `PATH:NAME` (as for `symbol`), such
 as `src/shop/models.py:Item.label`, so you don't need to look up the line and column.
