@@ -1,6 +1,8 @@
 from ._find_callees import (
     Callee,
+    CalleeGraph,
     CalleeQuery,
+    build_callee_graph,
     find_all_callees,
     find_direct_callees,
 )
@@ -19,6 +21,7 @@ from ._utils import Error, Location, Result
 
 __all__ = [
     "Callee",
+    "CalleeGraph",
     "CalleeQuery",
     "Caller",
     "CallerQuery",
@@ -30,6 +33,7 @@ __all__ = [
     "Symbol",
     "SymbolQuery",
     "TyLSP",
+    "build_callee_graph",
     "find_all_callees",
     "find_all_callers",
     "find_decorated",

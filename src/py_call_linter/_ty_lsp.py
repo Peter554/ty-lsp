@@ -1,5 +1,6 @@
 """A long-lived ``ty server`` process."""
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Self
 
@@ -45,3 +46,9 @@ class TyLSP:
 
     def request(self, method: str, params: Any) -> Any:
         return self._lsp.request(method, params)
+
+    def request_many(
+        self, method: str, params_list: Sequence[Any], *, window: int = 16
+    ) -> list[Any]:
+        """Send many requests of one method at once; see ``LSPClient.request_many``."""
+        return self._lsp.request_many(method, params_list, window=window)

@@ -67,6 +67,42 @@ class LSPClient:
                 return message.get("result")
             # Anything else (diagnostics, log messages, progress) is ignored.
 
+    def request_many(
+        self, method: str, params_list: Sequence[Any], *, window: int = 16
+    ) -> list[Any]:
+        """Send many requests of one method, with up to ``window`` outstanding.
+
+        The server can work on several at once, which is faster than one at a time
+        for cheap requests. Results are in the order of ``params_list``. If any
+        request fails, the rest are still collected and then a ``ResponseError``
+        for the first failure is raised.
+        """
+        results: list[Any] = [None] * len(params_list)
+        pending: dict[int, int] = {}  # request id -> index in params_list
+        errors: list[tuple[int, Any]] = []
+        sent = answered = 0
+        while answered < len(params_list):
+            while sent < len(params_list) and len(pending) < window:
+                self._next_id += 1
+                pending[self._next_id] = sent
+                self._send(
+                    {"id": self._next_id, "method": method, "params": params_list[sent]}
+                )
+                sent += 1
+            message = self._read()
+            if "method" in message and "id" in message:
+                self._reply_to_server_request(message)
+            elif (index := pending.pop(message.get("id"), None)) is not None:
+                if "error" in message:
+                    errors.append((index, message["error"]))
+                else:
+                    results[index] = message.get("result")
+                answered += 1
+        if errors:
+            index, error = min(errors)
+            raise ResponseError(f"{method} failed: {error}")
+        return results
+
     def _reply_to_server_request(self, message: JSON) -> None:
         # The server may call us mid-request and blocks until we answer, so every
         # server request needs a reply. We have no settings, so answer with null.

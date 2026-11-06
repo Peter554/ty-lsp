@@ -1,6 +1,7 @@
 """Find the direct and indirect callers of a function, method or class using ty."""
 
 import dataclasses
+from collections.abc import Sequence
 from typing import Any
 
 import pydantic
@@ -72,6 +73,26 @@ def prepare_call_hierarchy(lsp: TyLSP, query: Location) -> list[RawItem]:
         },
     )
     return _ITEMS.validate_python(items or [])
+
+
+def prepare_call_hierarchy_many(
+    lsp: TyLSP, queries: Sequence[Location]
+) -> list[list[RawItem]]:
+    """Like ``prepare_call_hierarchy`` for many queries at once, in the same order.
+
+    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    """
+    responses = lsp.request_many(
+        "textDocument/prepareCallHierarchy",
+        [
+            {
+                "textDocument": {"uri": query.path.resolve().as_uri()},
+                "position": {"line": query.line - 1, "character": query.column - 1},
+            }
+            for query in queries
+        ],
+    )
+    return [_ITEMS.validate_python(items or []) for items in responses]
 
 
 def incoming_callers(lsp: TyLSP, callee: RawItem) -> list[CallerEdge]:

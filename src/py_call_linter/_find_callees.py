@@ -1,6 +1,8 @@
 """Find the direct and indirect callees of a function, method or class using ty."""
 
 import dataclasses
+from collections import deque
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ from ._find_callers import (
     RawItem,
     item_location,
     prepare_call_hierarchy,
+    prepare_call_hierarchy_many,
 )
 from ._lsp import ResponseError
 from ._ty_lsp import TyLSP
@@ -47,14 +50,10 @@ class CalleeEdge:
     """The callee as a call hierarchy item, to find *its* callees with."""
 
 
-def outgoing_callees(lsp: TyLSP, caller: RawItem) -> list[CalleeEdge]:
-    """The direct callees of ``caller``, one entry per distinct callee.
-
-    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
-    """
+def _edges(caller: RawItem, outgoing: Any) -> list[CalleeEdge]:
+    """Turn an ``outgoingCalls`` response for ``caller`` into one edge per callee."""
     caller_item = CallHierarchyItem.model_validate(caller)
     caller_location = item_location(caller)
-    outgoing: Any = lsp.request("callHierarchy/outgoingCalls", {"item": caller})
     # Keyed by the callee's definition so a callee listed more than once is merged
     # (dicts keep insertion order).
     merged: dict[Location, tuple[RawItem, dict[Location, None]]] = {}
@@ -78,6 +77,27 @@ def outgoing_callees(lsp: TyLSP, caller: RawItem) -> list[CalleeEdge]:
         )
         for location, (raw_callee, call_sites) in merged.items()
     ]
+
+
+def outgoing_callees(lsp: TyLSP, caller: RawItem) -> list[CalleeEdge]:
+    """The direct callees of ``caller``, one entry per distinct callee.
+
+    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    """
+    return _edges(caller, lsp.request("callHierarchy/outgoingCalls", {"item": caller}))
+
+
+def outgoing_callees_many(
+    lsp: TyLSP, callers: Sequence[RawItem]
+) -> list[list[CalleeEdge]]:
+    """Like ``outgoing_callees`` for many callers at once, in the same order.
+
+    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    """
+    responses = lsp.request_many(
+        "callHierarchy/outgoingCalls", [{"item": caller} for caller in callers]
+    )
+    return [_edges(caller, r) for caller, r in zip(callers, responses, strict=True)]
 
 
 def find_direct_callees(lsp: TyLSP, query: CalleeQuery) -> Result[tuple[Callee, ...]]:
@@ -132,8 +152,8 @@ def find_all_callees(
         while frontier and (max_depth is None or depth < max_depth):
             depth += 1
             next_frontier: list[RawItem] = []
-            for item in frontier:
-                for edge in outgoing_callees(lsp, item):
+            for callee_edges in outgoing_callees_many(lsp, frontier):
+                for edge in callee_edges:
                     edges.append(edge.callee)
                     # Already-seen callees (including the queried function itself,
                     # for recursion) still get an edge but are not expanded again.
@@ -146,5 +166,98 @@ def find_all_callees(
                         next_frontier.append(edge.item)
             frontier = next_frontier
         return tuple(edges)
+    except (ResponseError, pydantic.ValidationError) as exc:
+        return Error(str(exc), exc)
+
+
+@dataclasses.dataclass(frozen=True)
+class CalleeGraph:
+    """Who calls whom, for everything reachable from some starting functions."""
+
+    edges: Mapping[Location, tuple[Callee, ...]]
+    """For each function that was looked up, its direct callees."""
+
+    def callees_of(self, function: Location) -> tuple[Callee, ...]:
+        """The direct callees of the function defined at ``function``.
+
+        Empty for a function that was not looked up (outside ``within``, or not
+        reachable from the starting functions).
+        """
+        return self.edges.get(function, ())
+
+    def reachable_from(
+        self, function: Location, *, max_depth: int | None = None
+    ) -> tuple[Callee, ...]:
+        """Every direct and indirect callee of ``function``, as ``find_all_callees``.
+
+        Edges come in breadth-first order, each function is expanded once, and
+        ``max_depth`` limits the levels followed. This only reads the graph; it
+        makes no requests to ty.
+        """
+        result: list[Callee] = []
+        seen = {function}
+        queue = deque([(function, 1)])
+        while queue:
+            current, depth = queue.popleft()
+            if max_depth is not None and depth > max_depth:
+                break
+            for callee in self.callees_of(current):
+                result.append(callee)
+                if callee.location not in seen:
+                    seen.add(callee.location)
+                    queue.append((callee.location, depth + 1))
+        return tuple(result)
+
+
+def build_callee_graph(
+    lsp: TyLSP, starts: Iterable[Location], *, within: Path | None = None
+) -> Result[CalleeGraph]:
+    """Look up the callees of ``starts`` and of everything they reach, once each.
+
+    Use this instead of calling ``find_all_callees`` for many functions: those
+    walks overlap, and here every function is looked up only once and the
+    requests are sent in batches. Then ask the graph about each start with
+    ``CalleeGraph.reachable_from``.
+
+    ``starts`` are positions of functions, methods or classes. ``within`` is a
+    directory: callees outside it are in the graph as callees but not looked up
+    themselves, so they have no callees. A start that is not a function, method or
+    class is skipped.
+
+    If any lookup fails, that ``Error`` is returned and no partial graph is. A
+    crashed server raises ``RuntimeError``.
+    """
+    if within is not None:
+        within = within.resolve()
+    try:
+        frontier = [
+            item
+            for items in prepare_call_hierarchy_many(lsp, list(starts))
+            for item in items
+        ]
+        seen: set[Location] = set()
+        unique: list[RawItem] = []
+        for item in frontier:
+            if item_location(item) not in seen:
+                seen.add(item_location(item))
+                unique.append(item)
+        frontier = unique
+        graph: dict[Location, tuple[Callee, ...]] = {}
+        while frontier:
+            next_frontier: list[RawItem] = []
+            for item, callee_edges in zip(
+                frontier, outgoing_callees_many(lsp, frontier), strict=True
+            ):
+                graph[item_location(item)] = tuple(e.callee for e in callee_edges)
+                for edge in callee_edges:
+                    if edge.callee.location in seen:
+                        continue
+                    seen.add(edge.callee.location)
+                    if within is None or edge.callee.location.path.is_relative_to(
+                        within
+                    ):
+                        next_frontier.append(edge.item)
+            frontier = next_frontier
+        return CalleeGraph(edges=graph)
     except (ResponseError, pydantic.ValidationError) as exc:
         return Error(str(exc), exc)
