@@ -5,7 +5,16 @@ from typing import Any
 
 import pydantic
 
-from .._common import Error, Location, LspLocation, LspRange, Result, to_location
+from .._common import (
+    Error,
+    Location,
+    LspLocation,
+    LspRange,
+    PathError,
+    Result,
+    check_file,
+    to_location,
+)
 from .._lsp import ResponseError
 from .._ty_lsp import TyLSP
 
@@ -13,18 +22,22 @@ from .._ty_lsp import TyLSP
 def capture[**P, T](fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> Result[T]:
     """Call ``fn``, turning a failed lookup into an ``Error``.
 
-    A ``ResponseError`` (the server rejected the request) or a
-    ``pydantic.ValidationError`` (it answered with something unexpected) becomes an
-    ``Error``. Anything else, such as a crashed server, propagates.
+    A ``PathError`` (the file does not exist), a ``ResponseError`` (the server
+    rejected the request) or a ``pydantic.ValidationError`` (it answered with
+    something unexpected) becomes an ``Error``. Anything else, such as a crashed server, propagates.
     """
     try:
         return fn(*args, **kwargs)
-    except (ResponseError, pydantic.ValidationError) as exc:
+    except (PathError, ResponseError, pydantic.ValidationError) as exc:
         return Error(str(exc), exc)
 
 
 def position_params(location: Location) -> dict[str, Any]:
-    """The ``TextDocumentPositionParams`` of a 1-based ``Location``."""
+    """The ``TextDocumentPositionParams`` of a 1-based ``Location``.
+
+    Raises ``PathError`` if the file does not exist.
+    """
+    check_file(location.path)
     return {
         "textDocument": {"uri": location.path.resolve().as_uri()},
         "position": {"line": location.line - 1, "character": location.column - 1},
@@ -52,7 +65,7 @@ def _to_location(location: LspLocation | LspLocationLink) -> Location:
 def request_locations(lsp: TyLSP, method: str, query: Location) -> tuple[Location, ...]:
     """The locations the server gives for ``method`` (e.g. ``textDocument/definition``) at ``query``.
 
-    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    Raises what ``capture`` turns into an ``Error``.
     """
     result: Any = lsp._request(method, position_params(query))
     if result is None:
@@ -95,7 +108,7 @@ def prepare_hierarchy(lsp: TyLSP, method: str, query: Location) -> list[RawItem]
     ``textDocument/prepareTypeHierarchy``. The result is empty if there is nothing
     to resolve, and has several items if the name has several definitions.
 
-    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    Raises what ``capture`` turns into an ``Error``.
     """
     items: Any = lsp._request(method, position_params(query))
     return RAW_OBJECTS.validate_python(items or [])

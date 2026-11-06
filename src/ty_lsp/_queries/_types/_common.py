@@ -34,7 +34,7 @@ def walk_hierarchy(
     Breadth-first, each type expanded once. A type reached by several routes (as
     with multiple inheritance) gets an edge for each route.
 
-    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    Raises what ``capture`` turns into an ``Error``.
     """
 
     def expand(items: list[RawItem]) -> list[list[tuple[Edge, RawItem]]]:

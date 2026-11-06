@@ -12,8 +12,8 @@ are ``Location``s (1-based), and each query returns its result or an ``Error``::
 from ._common import Error, Location, Result
 from ._queries._calls._find_callees import Callee, find_all_callees, find_direct_callees
 from ._queries._calls._find_callers import Caller, find_all_callers, find_direct_callers
-from ._queries._definitions._go_to_definition import go_to_definition
-from ._queries._definitions._go_to_type_definition import go_to_type_definition
+from ._queries._definitions._find_definition import find_definition
+from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
 from ._queries._symbols._find_symbol import SymbolQuery, find_symbol
 from ._queries._symbols._list_symbols import Symbol, list_symbols
@@ -33,8 +33,8 @@ __all__ = [  # noqa: RUF022 (ordered for the docs)
     # Server
     "TyLSP",
     # Queries
-    "go_to_definition",
-    "go_to_type_definition",
+    "find_definition",
+    "find_type_definition",
     "find_references",
     "list_symbols",
     "find_symbol",

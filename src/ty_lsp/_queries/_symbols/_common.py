@@ -5,7 +5,7 @@ from typing import Any
 
 import pydantic
 
-from ..._common import LspRange
+from ..._common import LspRange, check_file
 from ..._ty_lsp import TyLSP
 
 
@@ -22,8 +22,9 @@ _SYMBOLS = pydantic.TypeAdapter(list[DocumentSymbol])
 def request_symbols(lsp: TyLSP, path: Path) -> list[DocumentSymbol]:
     """The symbols of the file at the resolved ``path``, nested ones as children.
 
-    Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
+    Raises what ``capture`` turns into an ``Error``.
     """
+    check_file(path)
     result: Any = lsp._request(
         "textDocument/documentSymbol", {"textDocument": {"uri": path.as_uri()}}
     )

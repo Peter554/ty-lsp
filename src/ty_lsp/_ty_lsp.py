@@ -17,10 +17,14 @@ class TyLSP:
     thread-safe. Queries read files from disk, so they see saved changes only.
     """
 
-    def __init__(self, root: Path) -> None:
-        """Start the ``ty server`` of the installed ``ty`` package for the project at ``root``."""
+    def __init__(self, root: Path, *, stderr: Path | None = None) -> None:
+        """Start the ``ty server`` of the installed ``ty`` package for the project at ``root``.
+
+        The server's stderr (its log) is written to the file ``stderr``, which is
+        overwritten, or discarded if ``stderr`` is ``None``.
+        """
         self._root = root.resolve()
-        self._lsp = LSPClient([ty.find_ty_bin(), "server"], self._root)
+        self._lsp = LSPClient([ty.find_ty_bin(), "server"], self._root, stderr=stderr)
         try:
             self._lsp.request(
                 "initialize",

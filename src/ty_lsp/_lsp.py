@@ -16,14 +16,23 @@ class ResponseError(RuntimeError):
 class LSPClient:
     """Runs a language server subprocess and exchanges messages with it."""
 
-    def __init__(self, command: Sequence[str], cwd: Path) -> None:
-        self._proc = subprocess.Popen(
-            command,
-            cwd=cwd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=None,
-        )
+    def __init__(
+        self, command: Sequence[str], cwd: Path, *, stderr: Path | None = None
+    ) -> None:
+        """Start ``command`` in ``cwd``; its stderr goes to ``stderr``, or nowhere."""
+        self._stderr: IO[bytes] | None = None if stderr is None else stderr.open("wb")
+        try:
+            self._proc = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL if self._stderr is None else self._stderr,
+            )
+        except BaseException:
+            if self._stderr is not None:
+                self._stderr.close()
+            raise
         assert self._proc.stdin is not None and self._proc.stdout is not None
         self._stdin: IO[bytes] = self._proc.stdin
         self._stdout: IO[bytes] = self._proc.stdout
@@ -45,6 +54,8 @@ class LSPClient:
                 self._proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+            if self._stderr is not None:
+                self._stderr.close()
 
     def notify(self, method: str, params: Any) -> None:
         self._send({"method": method, "params": params})

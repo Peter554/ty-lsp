@@ -5,11 +5,14 @@ description = "A Python library for querying code with ty's language server"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cyclopts>=5.3.3",
     "pydantic>=2.14.3",
     "ty>=0.0.98",
 ]
 
 
+[project.scripts]
+ty-lsp = "ty_lsp._cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.1,<0.10.0"]
