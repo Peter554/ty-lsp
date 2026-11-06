@@ -1,5 +1,12 @@
-from ._find_callers import Caller, CallerQuery, find_all_callers, find_direct_callers
+from ._find_callers import (
+    Caller,
+    CallerQuery,
+    find_all_callers,
+    find_direct_callers,
+)
+from ._find_decorated import find_decorated
 from ._find_references import ReferenceQuery, find_references
+from ._find_symbol import Symbol, SymbolQuery, find_symbol, list_symbols
 from ._go_to_definition import DefinitionQuery, go_to_definition
 from ._ty_lsp import TyLSP
 from ._utils import Error, Location, Result
@@ -12,9 +19,14 @@ __all__ = [
     "Location",
     "ReferenceQuery",
     "Result",
+    "Symbol",
+    "SymbolQuery",
     "TyLSP",
     "find_all_callers",
+    "find_decorated",
     "find_direct_callers",
     "find_references",
+    "find_symbol",
     "go_to_definition",
+    "list_symbols",
 ]

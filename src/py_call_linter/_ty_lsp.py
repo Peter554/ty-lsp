@@ -22,7 +22,14 @@ class TyLSP:
                     "workspaceFolders": [
                         {"uri": self.root.as_uri(), "name": self.root.name}
                     ],
-                    "capabilities": {},
+                    "capabilities": {
+                        # Nested symbols with the position of each name.
+                        "textDocument": {
+                            "documentSymbol": {
+                                "hierarchicalDocumentSymbolSupport": True
+                            }
+                        }
+                    },
                 },
             )
             self._lsp.notify("initialized", {})

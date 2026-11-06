@@ -14,3 +14,9 @@ def find(path: Path, text: str, *, nth: int = 1) -> Location:
     ]
     number, line = matches[nth - 1]
     return Location(path=path, line=number, column=line.index(text) + 1)
+
+
+def name_in(path: Path, line_text: str, name: str) -> Location:
+    """The location of ``name`` within the first line of ``path`` with ``line_text``."""
+    line = find(path, line_text)
+    return line.model_copy(update={"column": line.column + line_text.index(name)})

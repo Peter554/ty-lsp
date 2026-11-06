@@ -1,10 +1,8 @@
 """End-to-end tests of ``find_references`` against ``tests/fixture_project``."""
 
-from pathlib import Path
-
 from py_call_linter import Location, ReferenceQuery, TyLSP, find_references
 
-from ._support import PROJECT, find
+from ._support import PROJECT, name_in
 
 INVENTORY = PROJECT / "shop" / "inventory"
 STOCK = INVENTORY / "stock.py"
@@ -12,12 +10,6 @@ INIT = INVENTORY / "__init__.py"
 AUDIT = INVENTORY / "audit.py"
 REPORT = INVENTORY / "deep" / "report.py"
 CHECKOUT = PROJECT / "shop" / "checkout.py"
-
-
-def name_in(path: Path, line_text: str, name: str) -> Location:
-    """The location of ``name`` within the first line of ``path`` with ``line_text``."""
-    line = find(path, line_text)
-    return line.model_copy(update={"column": line.column + line_text.index(name)})
 
 
 def references(lsp: TyLSP, at: Location) -> set[Location]:
