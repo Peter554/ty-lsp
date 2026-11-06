@@ -29,7 +29,8 @@ ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 
 ## Tips
 
-- To find a position, use `symbols PATH` or `symbol PATH:NAME`, which give the location of a name.
+- Instead of `PATH:LINE:COLUMN`, any position command accepts `PATH:NAME` for a symbol defined in the file, e.g. `ty-lsp callers src/a.py:Class.method`. If the name is not found or is defined more than once, that query fails with the candidate positions - repeat it with one of them.
+- To find positions, use `symbols PATH` or `symbol PATH:NAME`, which give the location of names.
 - Pass several queries in one run - the server starts once: `ty-lsp references a.py:3:5 b.py:8:1`. Or use `--stdin` / `--file FILE` with one query per line.
 - Prefer `callers`/`callees` without `--all` first; the indirect graph (especially callees, which include the standard library) can be large. Limit it with `--max-depth` or `--within`.
 - Read results with care for empty ones: an empty result means ty found nothing, such as a dynamic call it cannot resolve.

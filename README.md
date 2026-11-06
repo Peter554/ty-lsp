@@ -69,6 +69,12 @@ Options for all commands:
 | `--stdin`      | Also read queries from stdin                             |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)        |
 
+Wherever a command takes a position it also takes `PATH:NAME` (as for `symbol`), such
+as `src/shop/models.py:Item.label`, so you don't need to look up the line and column.
+The name must be defined exactly once in the file. If it isn't found, or is defined
+several times (for example in `if`/`else` branches), that query fails with an error
+listing the candidates, and you can repeat it with a position.
+
 ### `definition`
 
 Where each name is defined.

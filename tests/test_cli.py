@@ -232,3 +232,41 @@ def test_text_format_marks_empty_results(
         result_action="return_value",
     )
     assert capfd.readouterr().out == f"## {top}\n(none)\n"
+
+
+def test_a_name_resolves_to_its_position(cli: Any) -> None:
+    graph = PROJECT / "shop" / "graph.py"
+    leaf = find(graph, "leaf()")
+    _, by_position = cli("callers", at(leaf))
+    code, by_name = cli("callers", f"{graph}:leaf")
+    assert code == 0
+    assert by_name[0]["result"] == by_position[0]["result"]
+    assert by_name[0]["query"] == {
+        "raw": f"{graph}:leaf",
+        "parsed": {"path": str(graph), "line": leaf.line, "column": leaf.column},
+    }
+
+
+def test_a_missing_or_ambiguous_name_is_an_error_for_that_query_only(cli: Any) -> None:
+    branches = PROJECT / "shop" / "branches.py"
+    first = find(branches, "def pick", nth=1)
+    second = find(branches, "def pick", nth=2)
+    use = at(find(APP, "make_item("))
+    code, out = cli("definition", f"{branches}:pick", f"{branches}:nope", use)
+    assert code == 1
+    assert out[0]["error"] == (
+        f"ambiguous symbol {branches}:pick, defined at: "
+        f"{first.line}:{first.column + 4}, {second.line}:{second.column + 4}"
+    )
+    assert out[1]["error"] == f"symbol not found: {branches}:nope"
+    assert "result" in out[2]
+
+
+def test_a_position_must_have_a_column(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    code = app(
+        ["definition", f"{APP}:6"], exit_on_error=False, result_action="return_value"
+    )
+    assert code == 2
+    assert "PATH:LINE:COLUMN or PATH:NAME" in capfd.readouterr().err

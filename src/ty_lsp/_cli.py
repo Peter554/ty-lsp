@@ -14,6 +14,10 @@ With ``--format text`` the output is compact text for agents instead: a
 ``## query`` heading per query, then a line per result (``error: ...`` if it failed,
 ``(none)`` if empty). The exit code is the same.
 
+Where a query takes a position (``PATH:LINE:COLUMN``) it can take ``PATH:NAME``
+instead, such as ``src/a.py:Class.method``. The name must be defined exactly once in
+the file: no match, or several, is an error for that query only.
+
 The exit code is 1 if any query failed, and 2 if the input is invalid.
 """
 
@@ -88,6 +92,42 @@ def parse_symbol(text: str) -> SymbolQuery:
     if not path or not name:
         raise InputError(f"expected PATH:NAME, got {text!r}")
     return SymbolQuery(path=Path(path), name=name)
+
+
+def parse_target(text: str) -> Location | SymbolQuery:
+    """Parse ``path:line:column``, or ``path:name`` (a name is never all digits)."""
+    try:
+        head, _, last = text.strip().rpartition(":")
+        if last.isdecimal():
+            return parse_location(text)
+        if head and all(part.isidentifier() for part in last.split(".")):
+            return parse_symbol(text)
+    except InputError:
+        pass
+    raise InputError(f"expected PATH:LINE:COLUMN or PATH:NAME, got {text!r}")
+
+
+def resolve_target(lsp: TyLSP, target: Location | SymbolQuery) -> Result[Location]:
+    """The position of ``target``; a name must be defined exactly once in its file."""
+    if isinstance(target, Location):
+        return target
+    found = find_symbol(lsp, target)
+    if isinstance(found, Error):
+        return found
+    where = f"{target.path}:{target.name}"
+    if not found:
+        message = f"symbol not found: {where}"
+    elif len(found) > 1:
+        message = f"ambiguous symbol {where}, defined at: " + ", ".join(
+            f"{loc.line}:{loc.column}" for loc in found
+        )
+    else:
+        return found[0]
+    return Error(message, LookupError(message))
+
+
+def _identity[Q](lsp: TyLSP, query: Q) -> Q:
+    return query
 
 
 @cyclopts.Parameter(name="*")
@@ -192,25 +232,33 @@ def _render_json(outcomes: Sequence[tuple[str, Any, Result[Any]]]) -> str:
     return json.dumps(entries, indent=2)
 
 
-def _run[Q](
+def _run[Q, R](
     args: Sequence[str],
     options: Options,
     parse: Callable[[str], Q],
-    query: Callable[[TyLSP, Q], Result[Any]],
+    resolve: Callable[[TyLSP, Q], Result[R]],
+    query: Callable[[TyLSP, R], Result[Any]],
 ) -> int:
-    """Run ``query`` for each input and print the output. Returns the exit code."""
+    """Run ``query`` for each input and print the output. Returns the exit code.
+
+    The parsed input is turned into the query's input with ``resolve``, which can
+    fail for just that input.
+    """
     try:
         texts = _read_queries(args, options)
         parsed = [parse(text) for text in texts]
     except (InputError, OSError) as exc:
         print(f"ty-lsp: {exc}", file=sys.stderr)
         return 2
-    outcomes: list[tuple[str, Q, Result[Any]]] = []
+    outcomes: list[tuple[str, Q | R, Result[Any]]] = []
     if parsed:
         with TyLSP(options.root, stderr=options.ty_stderr) as lsp:
-            outcomes = [
-                (text, q, query(lsp, q)) for text, q in zip(texts, parsed, strict=True)
-            ]
+            for text, q in zip(texts, parsed, strict=True):
+                resolved = resolve(lsp, q)
+                if isinstance(resolved, Error):
+                    outcomes.append((text, q, resolved))
+                else:
+                    outcomes.append((text, resolved, query(lsp, resolved)))
     if options.format == "text":
         print(_render_text([(text, result) for text, _, result in outcomes]))
     else:
@@ -225,9 +273,9 @@ def definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a name.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a name.
     """
-    return _run(queries, options, parse_location, find_definition)
+    return _run(queries, options, parse_target, resolve_target, find_definition)
 
 
 @app.command
@@ -237,9 +285,9 @@ def type_definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a name or expression.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a name or expression.
     """
-    return _run(queries, options, parse_location, find_type_definition)
+    return _run(queries, options, parse_target, resolve_target, find_type_definition)
 
 
 @app.command
@@ -249,9 +297,9 @@ def references(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a definition or usage.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a definition or usage.
     """
-    return _run(queries, options, parse_location, find_references)
+    return _run(queries, options, parse_target, resolve_target, find_references)
 
 
 @app.command
@@ -263,7 +311,7 @@ def symbols(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     queries
         PATH of a Python file.
     """
-    return _run(queries, options, parse_path, list_symbols)
+    return _run(queries, options, parse_path, _identity, list_symbols)
 
 
 @app.command
@@ -275,7 +323,7 @@ def symbol(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     queries
         PATH:NAME, where NAME may be dotted (Class.method).
     """
-    return _run(queries, options, parse_symbol, find_symbol)
+    return _run(queries, options, parse_symbol, _identity, find_symbol)
 
 
 @app.command
@@ -290,7 +338,7 @@ def callers(
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a definition or usage.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a definition or usage.
     all
         Include indirect callers (callers of callers).
     max_depth
@@ -300,10 +348,11 @@ def callers(
         return _run(
             queries,
             options,
-            parse_location,
+            parse_target,
+            resolve_target,
             lambda lsp, q: find_all_callers(lsp, q, max_depth=max_depth),
         )
-    return _run(queries, options, parse_location, find_direct_callers)
+    return _run(queries, options, parse_target, resolve_target, find_direct_callers)
 
 
 @app.command
@@ -319,7 +368,7 @@ def callees(
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a definition or usage.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a definition or usage.
     all
         Include indirect callees (what the callees call).
     max_depth
@@ -331,10 +380,11 @@ def callees(
         return _run(
             queries,
             options,
-            parse_location,
+            parse_target,
+            resolve_target,
             lambda lsp, q: find_all_callees(lsp, q, max_depth=max_depth, within=within),
         )
-    return _run(queries, options, parse_location, find_direct_callees)
+    return _run(queries, options, parse_target, resolve_target, find_direct_callees)
 
 
 @app.command
@@ -349,7 +399,7 @@ def subtypes(
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a class, or of a name whose type is a class.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a class, or of a name whose type is a class.
     all
         Include indirect subtypes (subtypes of subtypes).
     max_depth
@@ -359,10 +409,11 @@ def subtypes(
         return _run(
             queries,
             options,
-            parse_location,
+            parse_target,
+            resolve_target,
             lambda lsp, q: find_all_subtypes(lsp, q, max_depth=max_depth),
         )
-    return _run(queries, options, parse_location, find_direct_subtypes)
+    return _run(queries, options, parse_target, resolve_target, find_direct_subtypes)
 
 
 @app.command
@@ -377,7 +428,7 @@ def supertypes(
     Parameters
     ----------
     queries
-        PATH:LINE:COLUMN (1-based) of a class, or of a name whose type is a class.
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a class, or of a name whose type is a class.
     all
         Include indirect supertypes (base classes of base classes).
     max_depth
@@ -387,10 +438,11 @@ def supertypes(
         return _run(
             queries,
             options,
-            parse_location,
+            parse_target,
+            resolve_target,
             lambda lsp, q: find_all_supertypes(lsp, q, max_depth=max_depth),
         )
-    return _run(queries, options, parse_location, find_direct_supertypes)
+    return _run(queries, options, parse_target, resolve_target, find_direct_supertypes)
 
 
 _DEFAULT_SKILLS_DIR = Path.home() / ".claude" / "skills"
