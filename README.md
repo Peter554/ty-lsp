@@ -124,6 +124,17 @@ $ ty-lsp supertypes src/shop/shapes.py:12:7
 `callees` also takes `--within DIR`: callees outside it are listed, but what they call
 is not followed (implies `--all`).
 
+## Claude Code
+
+A skill that teaches [Claude Code](https://claude.com/claude-code) to use the CLI:
+
+```console
+$ ty-lsp install-claude-skill
+```
+
+This installs it to `~/.claude/skills/ty-lsp/`. Use `--skills-dir` to choose another
+directory, and `--force` to overwrite an existing installation without asking.
+
 ## Python API
 
 See the [documentation](https://peter554.github.io/ty-lsp/ty_lsp.html).

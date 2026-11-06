@@ -18,7 +18,7 @@ import json
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import cyclopts
 import pydantic
@@ -320,6 +320,41 @@ def supertypes(
             lambda lsp, q: find_all_supertypes(lsp, q, max_depth=max_depth),
         )
     return _run(queries, options, parse_location, find_direct_supertypes)
+
+
+_DEFAULT_SKILLS_DIR = Path.home() / ".claude" / "skills"
+
+
+@app.command(name="install-claude-skill")
+def install_claude_skill(
+    *,
+    skills_dir: Annotated[
+        Path, cyclopts.Parameter(name=["--skills-dir", "-d"])
+    ] = _DEFAULT_SKILLS_DIR,
+    force: Annotated[
+        bool, cyclopts.Parameter(name=["--force", "-f"], negative=())
+    ] = False,
+) -> int:
+    """Install the ty-lsp skill for Claude Code.
+
+    Parameters
+    ----------
+    skills_dir
+        The directory where Claude skills are stored.
+    force
+        Overwrite an existing installation without asking.
+    """
+    source = Path(__file__).parent / "claude_skill" / "SKILL.md"
+    target = skills_dir / "ty-lsp" / "SKILL.md"
+    if target.exists() and not force:
+        answer = input(f"Skill already exists at {target}. Overwrite? [y/N] ")
+        if answer.strip().lower() not in ("y", "yes"):
+            print("Installation cancelled.")
+            return 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source.read_text())
+    print(f"Installed skill to {target}")
+    return 0
 
 
 def main() -> None:

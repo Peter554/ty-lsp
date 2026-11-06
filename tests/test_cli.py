@@ -156,3 +156,37 @@ def test_symbol_queries_are_parsed_too(cli: Any) -> None:
     assert out[0]["query"]["parsed"] == {"path": str(MODELS), "name": "Item.label"}
     _, out = cli("symbols", str(MODELS))
     assert out[0]["query"]["parsed"] == str(MODELS)
+
+
+def test_install_claude_skill(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    def install(*args: str) -> int:
+        return app(
+            ["install-claude-skill", "--skills-dir", str(tmp_path), *args],
+            exit_on_error=False,
+            result_action="return_value",
+        )
+
+    assert install() == 0
+    skill = tmp_path / "ty-lsp" / "SKILL.md"
+    assert skill.read_text().startswith("---\nname: ty-lsp\n")
+    skill.write_text("changed")
+    assert install("--force") == 0
+    assert skill.read_text().startswith("---\nname: ty-lsp\n")
+
+
+def test_install_claude_skill_asks_before_overwriting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = tmp_path / "ty-lsp" / "SKILL.md"
+    skill.parent.mkdir()
+    skill.write_text("mine")
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    code = app(
+        ["install-claude-skill", "-d", str(tmp_path)],
+        exit_on_error=False,
+        result_action="return_value",
+    )
+    assert code == 1
+    assert skill.read_text() == "mine"
