@@ -100,7 +100,7 @@ $ ty-lsp callers src/shop/pricing.py:12:5
 What each function, method or class calls, with the call sites.
 
 ```console
-$ ty-lsp callees src/shop/checkout.py:20:5 --within src/shop
+$ ty-lsp callees src/shop/checkout.py:20:5
 ```
 
 ### `subtypes`
@@ -126,78 +126,4 @@ is not followed (implies `--all`).
 
 ## Python API
 
-```python
-from pathlib import Path
-
-from ty_lsp import Error, Location, TyLSP, find_all_callers
-
-with TyLSP(Path("my_project")) as lsp:
-    callers = find_all_callers(
-        lsp, Location(path=Path("my_project/a.py"), line=3, column=5)
-    )
-    if isinstance(callers, Error):
-        print(callers.message)
-    else:
-        for caller in callers:
-            print(caller.name, caller.location)
-```
-
-`TyLSP(root)` starts a server; start it once and make many queries, then shut it down
-(use it as a context manager). Pass `stderr=Path(...)` to keep ty's log (discarded by
-default). It is not thread-safe.
-
-Every query takes the `TyLSP` and a `Location`, and returns a tuple of results or an
-`Error`. An `Error` is returned if the file does not exist or ty fails the lookup; a
-crashed server raises `RuntimeError`. Check with `isinstance(result, Error)`.
-
-### `find_definition`
-
-`find_definition(lsp, location) -> Result[tuple[Location, ...]]`: where the name is
-defined.
-
-### `find_type_definition`
-
-`find_type_definition(lsp, location) -> Result[tuple[Location, ...]]`: where the type
-of the name or expression is defined.
-
-### `find_references`
-
-`find_references(lsp, location) -> Result[tuple[Location, ...]]`: every reference
-except the definition, sorted by path, line and column.
-
-### `list_symbols`
-
-`list_symbols(lsp, path) -> Result[tuple[Symbol, ...]]`: every symbol in a file, nested
-ones included, in file order. A `Symbol` has `name`, `location` (of the name) and
-`start` (of the whole definition, including decorators).
-
-### `find_symbol`
-
-`find_symbol(lsp, SymbolQuery(path=..., name="Class.method")) -> Result[tuple[Location, ...]]`:
-where the symbol is defined; empty if it isn't.
-
-### `find_direct_callers`, `find_all_callers`
-
-`-> Result[tuple[Caller, ...]]`. Each `Caller` says "`location` (named `name`) calls
-`callee`", with `call_sites`. `find_all_callers(..., max_depth=None)` follows callers of
-callers, in breadth-first order. Every edge is returned, and each function is expanded
-once, so recursion terminates.
-
-### `find_direct_callees`, `find_all_callees`
-
-`-> Result[tuple[Callee, ...]]`. Each `Callee` says "`caller` calls `location` (named
-`name`)", with `call_sites`. `find_all_callees(..., max_depth=None, within=None)` takes
-the same limits as the CLI.
-
-### `find_direct_subtypes`, `find_all_subtypes`
-
-`-> Result[tuple[Subtype, ...]]`. Each `Subtype` says "`location` (named `name`) inherits
-from `supertype`". `find_all_subtypes(..., max_depth=None)` follows the whole hierarchy.
-
-### `find_direct_supertypes`, `find_all_supertypes`
-
-`-> Result[tuple[Supertype, ...]]`. Each `Supertype` says "`location` (named `name`) is a
-base class of `subtype`". `find_all_supertypes(..., max_depth=None)` follows the whole
-hierarchy.
-
-See the docstrings (`just doc`) for details.
+See the [documentation](https://peter554.github.io/ty-lsp/ty_lsp.html).
