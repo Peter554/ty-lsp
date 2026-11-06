@@ -10,6 +10,10 @@ in order::
 ``raw`` is the query as given, and ``parsed`` is how it was understood, such as
 ``{"path": ..., "line": 3, "column": 5}``.
 
+With ``--format text`` the output is compact text for agents instead: a
+``## query`` heading per query, then a line per result (``error: ...`` if it failed,
+``(none)`` if empty). The exit code is the same.
+
 The exit code is 1 if any query failed, and 2 if the input is invalid.
 """
 
@@ -18,21 +22,34 @@ import json
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import cyclopts
 import pydantic
 
 from ._common import Error, Location, Result
-from ._queries._calls._find_callees import find_all_callees, find_direct_callees
-from ._queries._calls._find_callers import find_all_callers, find_direct_callers
+from ._queries._calls._find_callees import (
+    Callee,
+    find_all_callees,
+    find_direct_callees,
+)
+from ._queries._calls._find_callers import (
+    Caller,
+    find_all_callers,
+    find_direct_callers,
+)
 from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
 from ._queries._symbols._find_symbol import SymbolQuery, find_symbol
-from ._queries._symbols._list_symbols import list_symbols
-from ._queries._types._find_subtypes import find_all_subtypes, find_direct_subtypes
+from ._queries._symbols._list_symbols import Symbol, list_symbols
+from ._queries._types._find_subtypes import (
+    Subtype,
+    find_all_subtypes,
+    find_direct_subtypes,
+)
 from ._queries._types._find_supertypes import (
+    Supertype,
     find_all_supertypes,
     find_direct_supertypes,
 )
@@ -84,6 +101,11 @@ class Options:
     stdin: bool = False
     """Also read queries from stdin, one per line (as for --file)."""
 
+    format: Annotated[
+        Literal["json", "text"], cyclopts.Parameter(name=["--format", "-f"])
+    ] = "json"
+    """The output format: 'json', or 'text' (compact, for reading by agents)."""
+
     root: Path = Path()
     """The project directory the server runs in."""
 
@@ -113,38 +135,87 @@ def _read_queries(args: Sequence[str], options: Options) -> list[str]:
     return queries
 
 
+def _text_line(item: object) -> str:
+    """One result as a line of text. Paths are relative to the cwd where possible."""
+
+    def at(location: Location) -> str:
+        try:
+            path = location.path.relative_to(Path.cwd())
+        except ValueError:
+            path = location.path
+        return f"{path}:{location.line}:{location.column}"
+
+    def sites(call_sites: Sequence[Location]) -> str:
+        return " at " + ", ".join(map(at, call_sites)) if call_sites else ""
+
+    match item:
+        case Location():
+            return at(item)
+        case Caller():
+            return f"{item.name} {at(item.location)} calls {at(item.callee)}{sites(item.call_sites)}"
+        case Callee():
+            return f"{at(item.caller)} calls {item.name} {at(item.location)}{sites(item.call_sites)}"
+        case Subtype():
+            return f"{item.name} {at(item.location)} subtype of {at(item.supertype)}"
+        case Supertype():
+            return f"{item.name} {at(item.location)} supertype of {at(item.subtype)}"
+        case Symbol():
+            return f"{item.name} {at(item.location)}"
+        case _:
+            raise TypeError(f"cannot render {item!r}")
+
+
+def _render_text(outcomes: Sequence[tuple[str, Result[Any]]]) -> str:
+    """The outcomes as text: a ``## query`` heading, then a line per result."""
+    blocks: list[str] = []
+    for text, result in outcomes:
+        if isinstance(result, Error):
+            lines = [f"error: {result.message}"]
+        else:
+            lines = [_text_line(item) for item in result] or ["(none)"]
+        blocks.append("\n".join([f"## {text}", *lines]))
+    return "\n\n".join(blocks)
+
+
+def _render_json(outcomes: Sequence[tuple[str, Any, Result[Any]]]) -> str:
+    """The outcomes as a JSON list with an entry per query."""
+    entries: list[dict[str, Any]] = []
+    for text, parsed, result in outcomes:
+        entry: dict[str, Any] = {
+            "query": {"raw": text, "parsed": _JSON.dump_python(parsed, mode="json")}
+        }
+        if isinstance(result, Error):
+            entry["error"] = result.message
+        else:
+            entry["result"] = _JSON.dump_python(result, mode="json")
+        entries.append(entry)
+    return json.dumps(entries, indent=2)
+
+
 def _run[Q](
     args: Sequence[str],
     options: Options,
     parse: Callable[[str], Q],
     query: Callable[[TyLSP, Q], Result[Any]],
 ) -> int:
-    """Run ``query`` for each input and print the JSON list. Returns the exit code."""
+    """Run ``query`` for each input and print the output. Returns the exit code."""
     try:
         texts = _read_queries(args, options)
         parsed = [parse(text) for text in texts]
     except (InputError, OSError) as exc:
         print(f"ty-lsp: {exc}", file=sys.stderr)
         return 2
-    entries: list[dict[str, Any]] = []
+    outcomes: list[tuple[str, Q, Result[Any]]] = []
     if parsed:
         with TyLSP(options.root, stderr=options.ty_stderr) as lsp:
-            for text, q in zip(texts, parsed, strict=True):
-                entry: dict[str, Any] = {
-                    "query": {
-                        "raw": text,
-                        "parsed": _JSON.dump_python(q, mode="json"),
-                    },
-                }
-                result = query(lsp, q)
-                if isinstance(result, Error):
-                    entry["error"] = result.message
-                else:
-                    entry["result"] = _JSON.dump_python(result, mode="json")
-                entries.append(entry)
-    json.dump(entries, sys.stdout, indent=2)
-    print()
-    return int(any("error" in entry for entry in entries))
+            outcomes = [
+                (text, q, query(lsp, q)) for text, q in zip(texts, parsed, strict=True)
+            ]
+    if options.format == "text":
+        print(_render_text([(text, result) for text, _, result in outcomes]))
+    else:
+        print(_render_json(outcomes))
+    return int(any(isinstance(result, Error) for _, _, result in outcomes))
 
 
 @app.command

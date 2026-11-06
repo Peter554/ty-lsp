@@ -35,11 +35,25 @@ The output is a JSON list on stdout with one entry per query, in order:
 A query that fails has `"error": "..."` instead of `"result"`. The exit code is 1 if
 any query failed and 2 if the input is invalid.
 
+With `--format text` (`-f text`) the output is compact text instead, better for agents:
+a `## query` heading per query, then a line per result, with paths relative to the
+current directory.
+
+```console
+$ ty-lsp callers src/shop/graph.py:4:5 --all -f text
+## src/shop/graph.py:4:5
+mid_a src/shop/graph.py:7:5 calls src/shop/graph.py:4:5 at src/shop/graph.py:8:5
+top src/shop/graph.py:15:5 calls src/shop/graph.py:7:5 at src/shop/graph.py:16:5
+```
+
+A failed query prints `error: ...` and an empty one prints `(none)`.
+
 Options for all commands:
 
 | Option         | Meaning                                                  |
 | -------------- | -------------------------------------------------------- |
 | `--root DIR`   | The project directory (default: the current directory)   |
+| `--format`, `-f` | `json` (default) or `text`                             |
 | `--file FILE`  | Also read queries from a file                            |
 | `--stdin`      | Also read queries from stdin                             |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)        |

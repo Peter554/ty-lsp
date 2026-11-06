@@ -7,7 +7,7 @@ description: Answers code navigation questions about Python code with ty - where
 
 `ty-lsp` queries Python code with ty's language server. Prefer it over grep for questions about definitions, usages, call graphs and class hierarchies: results follow imports, re-exports and inferred types.
 
-Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage).
+**Always use `-f text` (`--format text`) for compact, agent-readable output.** Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage).
 
 ## Commands
 
@@ -36,11 +36,16 @@ ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 
 ## Output
 
-A JSON list on stdout with one entry per query, in order:
+With `-f text`, each query has a `## query` heading followed by one line per result, with paths relative to the current directory:
 
-```json
-[{"query": {"raw": "src/a.py:3:5", "parsed": {"path": "src/a.py", "line": 3, "column": 5}},
-  "result": [{"path": "src/b.py", "line": 9, "column": 5}]}]
+```
+## src/a.py:3:5
+src/b.py:9:5                                   # definition, references, ...
+mid_a src/g.py:7:5 calls src/g.py:4:5 at src/g.py:8:5   # callers: NAME LOCATION calls CALLEE at CALL_SITES
+src/g.py:15:5 calls mid_a src/g.py:7:5 at src/g.py:16:5   # callees: CALLER calls NAME LOCATION at CALL_SITES
+Square src/s.py:7:7 subtype of src/s.py:4:7   # subtypes (and "supertype of" for supertypes)
 ```
 
-A query that failed has `"error": "..."` instead of `"result"` (for example a file that does not exist). The exit code is 1 if any query failed and 2 if the input is invalid. ty's own log is discarded; use `--ty-stderr FILE` to keep it when debugging.
+A failed query prints `error: ...` and an empty one prints `(none)`. The exit code is 1 if any query failed and 2 if the input is invalid. ty's own log is discarded; use `--ty-stderr FILE` to keep it when debugging.
+
+Without `-f text` the output is JSON: a list with one entry per query, each `{"query": {"raw", "parsed"}, "result": [...]}` or `{"query": ..., "error": "..."}`.

@@ -190,3 +190,45 @@ def test_install_claude_skill_asks_before_overwriting(
     )
     assert code == 1
     assert skill.read_text() == "mine"
+
+
+def test_text_format(
+    cli: Any, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(PROJECT)
+    leaf = find(PROJECT / "shop" / "graph.py", "leaf()")
+    nope = PROJECT / "nope.py"
+    code = app(
+        [
+            "callers",
+            at(leaf),
+            "--all",
+            f"{nope}:1:1",
+            "-f",
+            "text",
+            "--root",
+            str(PROJECT),
+        ],
+        exit_on_error=False,
+        result_action="return_value",
+    )
+    assert code == 1
+    out = capfd.readouterr().out
+    assert out.startswith(f"## {at(leaf)}\n")
+    assert (
+        "mid_a shop/graph.py:7:5 calls shop/graph.py:4:5 at shop/graph.py:8:5\n" in out
+    )
+    assert f"## {nope}:1:1\nerror: file not found: {nope}" in out
+
+
+def test_text_format_marks_empty_results(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(PROJECT)
+    top = at(find(PROJECT / "shop" / "graph.py", "top()"))
+    app(
+        ["callers", top, "-f", "text", "--root", str(PROJECT)],
+        exit_on_error=False,
+        result_action="return_value",
+    )
+    assert capfd.readouterr().out == f"## {top}\n(none)\n"
