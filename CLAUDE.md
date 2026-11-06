@@ -4,4 +4,5 @@ See @justfile for project recipes.
 
 ## Additional Instructions
 
-None right now...
+- Run `just check` after making changes
+

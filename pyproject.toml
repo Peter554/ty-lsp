@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "A linter for python function calls"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "pydantic>=2.14.3",
+]
 
 
 [project.scripts]
@@ -23,3 +25,9 @@ dev = [
     "ruff>=0.17.4",
     "ty>=0.0.98",
 ]
+
+[tool.ty.src]
+exclude = ["tests/fixture_project"]
+
+[tool.ruff]
+extend-exclude = ["tests/fixture_project"]
