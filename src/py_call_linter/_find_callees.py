@@ -53,29 +53,29 @@ class CalleeEdge:
 def _edges(caller: RawItem, outgoing: Any) -> list[CalleeEdge]:
     """Turn an ``outgoingCalls`` response for ``caller`` into one edge per callee."""
     caller_item = CallHierarchyItem.model_validate(caller)
-    caller_location = item_location(caller)
+    caller_location = to_location(caller_item.uri, caller_item.selection_range.start)
     # Keyed by the callee's definition so a callee listed more than once is merged
     # (dicts keep insertion order).
-    merged: dict[Location, tuple[RawItem, dict[Location, None]]] = {}
+    merged: dict[Location, tuple[RawItem, CallHierarchyItem, dict[Location, None]]] = {}
     for call in _OUTGOING_CALLS.validate_python(outgoing or []):
         raw_callee: RawItem = call["to"]
         callee_item = CallHierarchyItem.model_validate(raw_callee)
         location = to_location(callee_item.uri, callee_item.selection_range.start)
-        _, call_sites = merged.setdefault(location, (raw_callee, {}))
+        _, _, call_sites = merged.setdefault(location, (raw_callee, callee_item, {}))
         for r in _OutgoingCall.model_validate(call).from_ranges:
             # The ranges are inside the caller, so in the caller's file.
             call_sites[to_location(caller_item.uri, r.start)] = None
     return [
         CalleeEdge(
             callee=Callee(
-                name=CallHierarchyItem.model_validate(raw_callee).name,
+                name=callee_item.name,
                 location=location,
                 caller=caller_location,
                 call_sites=tuple(call_sites),
             ),
             item=raw_callee,
         )
-        for location, (raw_callee, call_sites) in merged.items()
+        for location, (raw_callee, callee_item, call_sites) in merged.items()
     ]
 
 

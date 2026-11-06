@@ -1,7 +1,7 @@
 """Find the direct and indirect callers of a function, method or class using ty."""
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 import pydantic
@@ -104,26 +104,53 @@ def incoming_callers(lsp: TyLSP, callee: RawItem) -> list[CallerEdge]:
     incoming: Any = lsp.request("callHierarchy/incomingCalls", {"item": callee})
     # Keyed by the caller's definition so a caller listed more than once is merged
     # (dicts keep insertion order).
-    merged: dict[Location, tuple[RawItem, dict[Location, None]]] = {}
+    merged: dict[Location, tuple[RawItem, CallHierarchyItem, dict[Location, None]]] = {}
     for call in _INCOMING_CALLS.validate_python(incoming or []):
         raw_caller: RawItem = call["from"]
         parsed = CallHierarchyItem.model_validate(raw_caller)
         location = to_location(parsed.uri, parsed.selection_range.start)
-        _, call_sites = merged.setdefault(location, (raw_caller, {}))
+        _, _, call_sites = merged.setdefault(location, (raw_caller, parsed, {}))
         for r in _IncomingCall.model_validate(call).from_ranges:
             call_sites[to_location(parsed.uri, r.start)] = None
     return [
         CallerEdge(
             caller=Caller(
-                name=CallHierarchyItem.model_validate(raw_caller).name,
+                name=parsed.name,
                 location=location,
                 callee=callee_location,
                 call_sites=tuple(call_sites),
             ),
             item=raw_caller,
         )
-        for location, (raw_caller, call_sites) in merged.items()
+        for location, (raw_caller, parsed, call_sites) in merged.items()
     ]
+
+
+def find_direct_callers_many(
+    lsp: TyLSP, queries: Iterable[CallerQuery]
+) -> Result[tuple[Caller, ...]]:
+    """Return every direct caller of any of the names at ``queries``.
+
+    The same as joining the results of ``find_direct_callers`` for each query, but
+    each distinct definition is looked up only once. That matters for a name with
+    several definitions, such as an overloaded function: asking at each of its
+    definitions would otherwise repeat the same (slow) lookups.
+
+    Per-query failures are returned as ``Error``; a crashed server raises
+    ``RuntimeError``.
+    """
+    try:
+        seen: set[Location] = set()
+        callers: list[Caller] = []
+        for items in prepare_call_hierarchy_many(lsp, list(queries)):
+            for item in items:
+                if item_location(item) in seen:
+                    continue
+                seen.add(item_location(item))
+                callers.extend(edge.caller for edge in incoming_callers(lsp, item))
+        return tuple(callers)
+    except (ResponseError, pydantic.ValidationError) as exc:
+        return Error(str(exc), exc)
 
 
 def find_direct_callers(lsp: TyLSP, query: CallerQuery) -> Result[tuple[Caller, ...]]:
@@ -134,14 +161,7 @@ def find_direct_callers(lsp: TyLSP, query: CallerQuery) -> Result[tuple[Caller, 
     Per-query failures are returned as ``Error``; a crashed server raises
     ``RuntimeError``.
     """
-    try:
-        return tuple(
-            edge.caller
-            for item in prepare_call_hierarchy(lsp, query)
-            for edge in incoming_callers(lsp, item)
-        )
-    except (ResponseError, pydantic.ValidationError) as exc:
-        return Error(str(exc), exc)
+    return find_direct_callers_many(lsp, [query])
 
 
 def find_all_callers(

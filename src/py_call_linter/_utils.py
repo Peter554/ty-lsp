@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -33,10 +34,16 @@ class LspLocation(pydantic.BaseModel):
     range: LspRange
 
 
+@functools.cache
+def uri_to_path(uri: str) -> Path:
+    """The path of a ``file://`` uri. Cached: a few files appear in very many uris."""
+    return Path(url2pathname(urlparse(uri).path))
+
+
 def to_location(uri: str, position: LspPosition) -> Location:
     """Convert an LSP uri and 0-based position to a 1-based ``Location``."""
     return Location(
-        path=Path(url2pathname(urlparse(uri).path)),
+        path=uri_to_path(uri),
         line=position.line + 1,
         column=position.character + 1,
     )

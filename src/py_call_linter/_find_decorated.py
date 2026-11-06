@@ -8,7 +8,7 @@ definition (between where the definition starts and its name) belongs to it.
 from collections import defaultdict
 from pathlib import Path
 
-from ._find_callers import CallerQuery, find_direct_callers
+from ._find_callers import CallerQuery, find_direct_callers_many
 from ._find_symbol import SymbolQuery, find_symbol, list_symbols
 from ._ty_lsp import TyLSP
 from ._utils import Error, Location, Result
@@ -40,10 +40,10 @@ def find_decorated(
     The decorator must be a function or class: ty does not track calls to
     variables (``deco = make_deco()``), so a decorator like that finds nothing,
     without an ``Error``. Decorators are matched by what they resolve to (using
-    ``find_direct_callers``), not by name: ``import ... as`` aliases, qualified names and re-exports all
-    match, and a different decorator with the same name does not. Both ``@name``
-    and ``@name(...)`` are found. A call to the decorator inside the arguments of
-    another decorator is counted too.
+    ``find_direct_callers_many``), not by name: ``import ... as`` aliases,
+    qualified names and re-exports all match, and a different decorator with the
+    same name does not. Both ``@name`` and ``@name(...)`` are found. A call to the
+    decorator inside the arguments of another decorator is counted too.
 
     Per-query failures are returned as ``Error``; a crashed type server raises
     ``RuntimeError``.
@@ -62,17 +62,17 @@ def find_decorated(
     else:
         decorator_locations = {decorator}
 
-    # An overloaded decorator reports the same call sites for each overload, so
-    # collect them in a set.
+    callers = find_direct_callers_many(
+        lsp, [CallerQuery(**location.model_dump()) for location in decorator_locations]
+    )
+    if isinstance(callers, Error):
+        return callers
+    # An overloaded decorator can report the same call site more than once.
     call_sites_by_file: dict[Path, set[Location]] = defaultdict(set)
-    for location in decorator_locations:
-        callers = find_direct_callers(lsp, CallerQuery(**location.model_dump()))
-        if isinstance(callers, Error):
-            return callers
-        for caller in callers:
-            for call_site in caller.call_sites:
-                if call_site.path.is_relative_to(root):
-                    call_sites_by_file[call_site.path].add(call_site)
+    for caller in callers:
+        for call_site in caller.call_sites:
+            if call_site.path.is_relative_to(root):
+                call_sites_by_file[call_site.path].add(call_site)
 
     decorated: set[Location] = set()
     for path, call_sites in call_sites_by_file.items():

@@ -11,6 +11,7 @@ from ._find_callers import (
     CallerQuery,
     find_all_callers,
     find_direct_callers,
+    find_direct_callers_many,
 )
 from ._find_decorated import find_decorated
 from ._find_references import ReferenceQuery, find_references
@@ -39,6 +40,7 @@ __all__ = [
     "find_decorated",
     "find_direct_callees",
     "find_direct_callers",
+    "find_direct_callers_many",
     "find_references",
     "find_symbol",
     "go_to_definition",
