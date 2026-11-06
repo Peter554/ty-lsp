@@ -1,0 +1,25 @@
+[project]
+name = "py-call-linter"
+version = "0.1.0"
+description = "A linter for python function calls"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+
+[project.scripts]
+py-call-linter = "py_call_linter._cli:main"
+
+
+[build-system]
+requires = ["uv_build>=0.9.1,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "deptry>=0.25.1",
+    "pdoc>=16.0.0",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+    "ty>=0.0.98",
+]
