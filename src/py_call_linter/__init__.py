@@ -1,3 +1,9 @@
+from ._find_callees import (
+    Callee,
+    CalleeQuery,
+    find_all_callees,
+    find_direct_callees,
+)
 from ._find_callers import (
     Caller,
     CallerQuery,
@@ -12,6 +18,8 @@ from ._ty_lsp import TyLSP
 from ._utils import Error, Location, Result
 
 __all__ = [
+    "Callee",
+    "CalleeQuery",
     "Caller",
     "CallerQuery",
     "DefinitionQuery",
@@ -22,8 +30,10 @@ __all__ = [
     "Symbol",
     "SymbolQuery",
     "TyLSP",
+    "find_all_callees",
     "find_all_callers",
     "find_decorated",
+    "find_direct_callees",
     "find_direct_callers",
     "find_references",
     "find_symbol",

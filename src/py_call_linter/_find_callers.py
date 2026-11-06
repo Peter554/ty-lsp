@@ -26,14 +26,16 @@ class Caller(Frozen):
     """Where in the caller the callee is called."""
 
 
-class _CallHierarchyItem(pydantic.BaseModel):
+class CallHierarchyItem(pydantic.BaseModel):
+    """The fields of a call hierarchy item that we read."""
+
     name: str
     uri: str
     selection_range: LspRange = pydantic.Field(alias="selectionRange")
 
 
 class _IncomingCall(pydantic.BaseModel):
-    from_: _CallHierarchyItem = pydantic.Field(alias="from")
+    from_: CallHierarchyItem = pydantic.Field(alias="from")
     from_ranges: list[LspRange] = pydantic.Field(alias="fromRanges")
 
 
@@ -53,11 +55,11 @@ class CallerEdge:
 
 def item_location(item: RawItem) -> Location:
     """Where the item's name is defined."""
-    parsed = _CallHierarchyItem.model_validate(item)
+    parsed = CallHierarchyItem.model_validate(item)
     return to_location(parsed.uri, parsed.selection_range.start)
 
 
-def prepare_call_hierarchy(lsp: TyLSP, query: CallerQuery) -> list[RawItem]:
+def prepare_call_hierarchy(lsp: TyLSP, query: Location) -> list[RawItem]:
     """Resolve ``query`` to call hierarchy items (several if the name has several definitions).
 
     Raises ``ResponseError`` or ``pydantic.ValidationError`` on failure.
@@ -84,7 +86,7 @@ def incoming_callers(lsp: TyLSP, callee: RawItem) -> list[CallerEdge]:
     merged: dict[Location, tuple[RawItem, dict[Location, None]]] = {}
     for call in _INCOMING_CALLS.validate_python(incoming or []):
         raw_caller: RawItem = call["from"]
-        parsed = _CallHierarchyItem.model_validate(raw_caller)
+        parsed = CallHierarchyItem.model_validate(raw_caller)
         location = to_location(parsed.uri, parsed.selection_range.start)
         _, call_sites = merged.setdefault(location, (raw_caller, {}))
         for r in _IncomingCall.model_validate(call).from_ranges:
@@ -92,7 +94,7 @@ def incoming_callers(lsp: TyLSP, callee: RawItem) -> list[CallerEdge]:
     return [
         CallerEdge(
             caller=Caller(
-                name=_CallHierarchyItem.model_validate(raw_caller).name,
+                name=CallHierarchyItem.model_validate(raw_caller).name,
                 location=location,
                 callee=callee_location,
                 call_sites=tuple(call_sites),

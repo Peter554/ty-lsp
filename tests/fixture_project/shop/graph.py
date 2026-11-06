@@ -33,3 +33,11 @@ def start() -> None:
 def countdown(n: int) -> None:
     if n:
         countdown(n - 1)
+
+
+def helper() -> None: ...
+
+
+def twice() -> None:
+    helper()
+    helper()
