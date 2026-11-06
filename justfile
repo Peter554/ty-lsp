@@ -28,6 +28,10 @@ fix:
     @uv run ruff check --fix
     @just fmt
 
-# Serve docs
+# Build the docs into docs/
+doc-build:
+    @uv run pdoc ty_lsp -o docs/
+
+# Serve the docs locally
 doc:
     @uv run pdoc ty_lsp
