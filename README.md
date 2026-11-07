@@ -246,7 +246,7 @@ Most of the time of a query is ty indexing the project, and each command starts 
 new ty server. To pay for that once, keep a server running:
 
 ```console
-$ ty-lsp serve                  # in a terminal; Ctrl-C (or `ty-lsp stop`) to stop it
+$ ty-lsp serve                  # in a terminal; Ctrl-C (or `ty-lsp stop-server`) to stop it
 $ ty-lsp subtypes shop.models:Item -f text      # now ~10x faster after the first query
 ```
 
@@ -257,7 +257,7 @@ is logged to stderr.
 With `--start-server`, a command starts a server in the background if there is none,
 so nothing needs to be set up first. It stops after 5 minutes without a request
 (`ty-lsp serve --idle-timeout MINUTES` sets this for one started by hand), and its
-log is `ty-lsp-<uid>/<hash>.log` in the temporary directory. `ty-lsp stop` stops it.
+log is `ty-lsp-<uid>/<hash>.log` in the temporary directory. `ty-lsp stop-server` stops it.
 `ty-lsp list-servers` lists the running servers (their project, process id, age and requests).
 
 A server uses a lot of memory on a large project (several GB on a big monorepo).

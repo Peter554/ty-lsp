@@ -660,7 +660,7 @@ def serve(*, root: Path = Path(), idle_timeout: float | None = None) -> int:
     """Keep a ty server running, so that other ty-lsp commands in the project are fast.
 
     Other commands in the project use it automatically while it runs (stop it with
-    Ctrl-C or 'ty-lsp stop'). The first query still pays for ty indexing the project;
+    Ctrl-C or 'ty-lsp stop-server'). The first query still pays for ty indexing the project;
     later ones do not. Changes to Python files are picked up. Each request is logged
     to stderr. Commands run with --start-server start one if there is none.
 
@@ -685,8 +685,8 @@ def serve(*, root: Path = Path(), idle_timeout: float | None = None) -> int:
     return 0
 
 
-@app.command(group=_SERVER)
-def stop(*, root: Path = Path()) -> int:
+@app.command(name="stop-server", group=_SERVER)
+def stop_server_command(*, root: Path = Path()) -> int:
     """Stop the server for the project, if one is running.
 
     Parameters
