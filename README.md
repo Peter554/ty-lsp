@@ -13,8 +13,6 @@ nothing else to install. Requires Python >=3.13.
 
 ```bash
 uv tool install --from git+https://github.com/Peter554/ty-lsp ty-lsp
-# or (suggested to create an alias)
-uvx --from git+https://github.com/Peter554/ty-lsp ty-lsp
 ```
 
 To use it as a Python library, add it to a project instead:
@@ -30,18 +28,18 @@ $ ty-lsp callers shop.pricing:total --all -f text
 There is one command per query (see [Commands](#commands)). Each takes any number of
 queries, and runs them all with one ty server, so give it many at once when you can.
 
-### Queries
+### Query Syntax
 
 A query says where to look. It has one of these forms:
 
-| Form               | Meaning                                                                      | Taken by                                                                                      |
-| ------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes` |
-| `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | the same, and `symbol`                                                                        |
-| `PATH`             | A file                                                                       | `symbols`                                                                                     |
-| `MODULE`           | A dotted module path, such as `shop.models`                                  | `file`                                                                                        |
+| Form               | Meaning                                                                      | Taken by commands                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes`           |
+| `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes`, `symbol` |
+| `PATH`             | A file                                                                       | `symbols`                                                                                                               |
+| `MODULE`           | A dotted module path, such as `shop.models`                                  | `file`                                                                                                                  |
 
-`PATH` is either:
+Where `PATH` is either:
 
 - a **file path**, such as `src/shop/models.py`. A relative path is relative to the
   current directory.
@@ -96,9 +94,9 @@ mid_a src/shop/graph.py:7:5 calls src/shop/graph.py:4:5 at src/shop/graph.py:8:5
 top src/shop/graph.py:15:5 calls src/shop/graph.py:7:5 at src/shop/graph.py:16:5
 ```
 
-### Options
+### Common Options
 
-For all commands:
+These are taken by all commands:
 
 | Option             | Meaning                                                |
 | ------------------ | ------------------------------------------------------ |
@@ -107,11 +105,6 @@ For all commands:
 | `--file FILE`      | Also read queries from a file                          |
 | `--stdin`          | Also read queries from stdin                           |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)          |
-
-`callers`, `callees`, `subtypes` and `supertypes` return direct relations only. Add
-`--all` for indirect ones too, or `--max-depth N` to follow N levels (implies `--all`).
-`callees` also takes `--within DIR`: callees outside it are listed, but what they call
-is not followed (implies `--all`).
 
 ### Commands
 
@@ -191,6 +184,12 @@ The functions, methods and classes that call each name, with the call sites.
 $ ty-lsp callers src/shop/pricing.py:12:5
 ```
 
+Options:
+
+- `--all`: also the indirect callers (callers of callers). By default only direct
+  callers are returned.
+- `--max-depth N`: follow at most N levels of callers (implies `--all`).
+
 #### `callees`
 
 What each function, method or class calls, with the call sites.
@@ -201,6 +200,14 @@ is looked up only once.
 $ ty-lsp callees src/shop/checkout.py:20:5
 ```
 
+Options:
+
+- `--all`: also the indirect callees (what the callees call). By default only direct
+  callees are returned.
+- `--max-depth N`: follow at most N levels of callees (implies `--all`).
+- `--within DIR`: callees outside the directory are listed, but what they call is not
+  followed (implies `--all`).
+
 #### `subtypes`
 
 The classes that inherit from each class. Only subclasses defined in the project are
@@ -210,6 +217,12 @@ found, not those in the standard library or installed packages.
 $ ty-lsp subtypes src/shop/shapes.py:5:7 --all
 ```
 
+Options:
+
+- `--all`: also the indirect subtypes (subtypes of subtypes). By default only direct
+  subtypes are returned.
+- `--max-depth N`: follow at most N levels of subtypes (implies `--all`).
+
 #### `supertypes`
 
 The base classes of each class, including `object`.
@@ -217,6 +230,12 @@ The base classes of each class, including `object`.
 ```console
 $ ty-lsp supertypes src/shop/shapes.py:12:7
 ```
+
+Options:
+
+- `--all`: also the indirect supertypes (base classes of base classes). By default only
+  direct supertypes are returned.
+- `--max-depth N`: follow at most N levels of supertypes (implies `--all`).
 
 ## Claude Code
 
