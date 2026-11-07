@@ -6,6 +6,7 @@ the command line or from Python. It answers questions like "where is this define
 nothing else to install. Requires Python >=3.13.
 
 - [CLI](https://github.com/Peter554/ty-lsp#cli)
+- [Server](https://github.com/Peter554/ty-lsp#server)
 - [Claude Code Skill](https://github.com/Peter554/ty-lsp#claude-code)
 - [Python API](https://github.com/Peter554/ty-lsp#python-api)
 
@@ -105,6 +106,7 @@ These are taken by all commands:
 | `--format`, `-f`   | `json` (default) or `text`                             |
 | `--file FILE`      | Also read queries from a file                          |
 | `--stdin`          | Also read queries from stdin                           |
+| `--start-server`   | Use the [server](#server), starting one if needed      |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)          |
 
 ### Commands
@@ -237,6 +239,27 @@ Options:
 - `--all`: also the indirect supertypes (base classes of base classes). By default only
   direct supertypes are returned.
 - `--max-depth N`: follow at most N levels of supertypes (implies `--all`).
+
+## Server
+
+Most of the time of a query is ty indexing the project, and each command starts a
+new ty server. To pay for that once, keep a server running:
+
+```console
+$ ty-lsp serve                  # in a terminal; Ctrl-C (or `ty-lsp stop`) to stop it
+$ ty-lsp subtypes shop.models:Item -f text      # now ~10x faster after the first query
+```
+
+While it runs, every query command in the project (the same `--root`) uses it, and
+prints the same output. It picks up edits, new files and deleted files. Each request
+is logged to stderr.
+
+With `--start-server`, a command starts a server in the background if there is none,
+so nothing needs to be set up first. It stops after 5 minutes without a request
+(`ty-lsp serve --idle-timeout MINUTES` sets this for one started by hand), and its
+log is `ty-lsp-<uid>/<hash>.log` in the temporary directory. `ty-lsp stop` stops it.
+
+A server uses a lot of memory on a large project (several GB on a big monorepo).
 
 ## Claude Code
 

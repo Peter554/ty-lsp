@@ -1,8 +1,8 @@
 """A long-lived ``ty server`` process."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import ty
 
@@ -66,3 +66,19 @@ class TyLSP:
     ) -> list[Any]:
         """Send many requests of one method at once; see ``LSPClient.request_many``."""
         return self._lsp.request_many(method, params_list, window=window)
+
+    def _files_changed(self, changes: Iterable[tuple[Path, Literal[1, 2, 3]]]) -> None:
+        """Tell the server that files changed on disk: 1 created, 2 changed, 3 deleted.
+
+        The server does not watch the files itself, so without this a long-lived
+        server answers from the files as they were when it first read them.
+        """
+        self._notify(
+            "workspace/didChangeWatchedFiles",
+            {
+                "changes": [
+                    {"uri": path.resolve().as_uri(), "type": kind}
+                    for path, kind in changes
+                ]
+            },
+        )

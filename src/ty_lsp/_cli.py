@@ -24,10 +24,12 @@ which ty looks up. ``file`` takes just a dotted module path, and gives its file.
 The exit code is 1 if any query failed, and 2 if the input is invalid.
 """
 
+import contextlib
 import dataclasses
 import json
 import keyword
 import os
+import signal
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -62,6 +64,8 @@ from ._queries._types._find_supertypes import (
     find_all_supertypes,
     find_direct_supertypes,
 )
+from ._server import Server, forward
+from ._server import stop as stop_server
 from ._ty_lsp import TyLSP
 
 app = cyclopts.App(
@@ -75,7 +79,15 @@ app = cyclopts.App(
     help_format="plaintext",
 )
 
+_QUERIES, _SERVER, _CLAUDE = (
+    cyclopts.Group.create_ordered(name) for name in ("Queries", "Server", "Claude")
+)
+"""The groups of commands in the help, in this order."""
+
 _JSON = pydantic.TypeAdapter[Any](Any)
+
+_shared_lsp: TyLSP | None = None
+"""The server to use instead of starting one: set while ``ty-lsp serve`` runs a command."""
 
 
 class InputError(Exception):
@@ -199,6 +211,12 @@ class Options:
 
     root: Path = Path()
     """The project directory the server runs in."""
+
+    # Never read here: ``_server.forward`` looks for this flag in the raw arguments,
+    # before they are parsed. It is declared so that the parser accepts it and the
+    # help lists it.
+    start_server: bool = False
+    """Use the server for the project (see 'serve'), and start one in the background if there is none. It stops after 5 minutes without a request."""
 
     ty_stderr: Path | None = None
     """Write the server's stderr (its log) to this file. Discarded by default."""
@@ -325,7 +343,11 @@ def _run[Q, R](
         return 2
     outcomes: list[tuple[str, Q | R, Result[Any]]] = []
     if parsed:
-        with TyLSP(options.root, stderr=options.ty_stderr) as lsp:
+        with (
+            contextlib.nullcontext(_shared_lsp)
+            if _shared_lsp is not None
+            else TyLSP(options.root, stderr=options.ty_stderr)
+        ) as lsp:
             resolutions = [resolve(lsp, q) for q in parsed]
             ok = [r for r in resolutions if not isinstance(r, Error)]
             answers = iter(many(lsp, ok) if many else [query(lsp, r) for r in ok])
@@ -341,7 +363,7 @@ def _run[Q, R](
     return int(any(isinstance(result, Error) for _, _, result in outcomes))
 
 
-@app.command
+@app.command(group=_QUERIES)
 def definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Where each name is defined.
 
@@ -353,7 +375,7 @@ def definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_target, resolve_target, find_definition)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def type_definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Where the type of each name or expression is defined.
 
@@ -365,7 +387,7 @@ def type_definition(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_target, resolve_target, find_type_definition)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def references(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Every reference to each name, except its definition.
 
@@ -387,7 +409,7 @@ def _file_of(lsp: TyLSP, module: str) -> Result[tuple[Path, ...]]:
     return path if isinstance(path, Error) else (path,)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def file(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """The file of each module.
 
@@ -399,7 +421,7 @@ def file(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, str.strip, _identity, _file_of)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def symbols(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Every symbol defined in each file.
 
@@ -411,7 +433,7 @@ def symbols(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_path, resolve_file, list_symbols)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def symbol(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Where each named symbol is defined in its file.
 
@@ -423,7 +445,7 @@ def symbol(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_symbol, resolve_symbol, find_symbol)
 
 
-@app.command(name="decorated-by")
+@app.command(name="decorated-by", group=_QUERIES)
 def decorated_by(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """The functions, methods and classes decorated with each decorator.
 
@@ -436,7 +458,7 @@ def decorated_by(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_target, resolve_target, find_decorated_by)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def callers(
     *queries: str,
     all: bool = False,
@@ -465,7 +487,7 @@ def callers(
     return _run(queries, options, parse_target, resolve_target, find_direct_callers)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def callees(
     *queries: str,
     all: bool = False,
@@ -498,7 +520,7 @@ def callees(
     )
 
 
-@app.command
+@app.command(group=_QUERIES)
 def subtypes(
     *queries: str,
     all: bool = False,
@@ -527,7 +549,7 @@ def subtypes(
     return _run(queries, options, parse_target, resolve_target, find_direct_subtypes)
 
 
-@app.command
+@app.command(group=_QUERIES)
 def supertypes(
     *queries: str,
     all: bool = False,
@@ -566,13 +588,13 @@ def _skill_parts() -> tuple[str, str]:
     return frontmatter, body.lstrip("\n")
 
 
-@app.command(name="claude-skill")
+@app.command(name="claude-skill", group=_CLAUDE)
 def claude_skill_instructions() -> None:
     """Print the instructions of the Claude Code skill, for the installed skill to include."""
     print(_skill_parts()[1], end="")
 
 
-@app.command(name="install-claude-skill")
+@app.command(name="install-claude-skill", group=_CLAUDE)
 def install_claude_skill(
     *,
     skills_dir: Annotated[
@@ -618,6 +640,67 @@ def install_claude_skill(
     return 0
 
 
+def _run_command_line(argv: list[str], lsp: TyLSP) -> int:
+    """Run a command line with ``lsp`` as its server, for ``ty-lsp serve``."""
+    global _shared_lsp
+    _shared_lsp = lsp
+    try:
+        code = app(argv, exit_on_error=False, result_action="return_value")
+    except Exception as exc:  # noqa: BLE001 (reported to the caller)
+        print(f"ty-lsp: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        _shared_lsp = None
+    return code if isinstance(code, int) else 0
+
+
+@app.command(group=_SERVER)
+def serve(*, root: Path = Path(), idle_timeout: float | None = None) -> int:
+    """Keep a ty server running, so that other ty-lsp commands in the project are fast.
+
+    Other commands in the project use it automatically while it runs (stop it with
+    Ctrl-C or 'ty-lsp stop'). The first query still pays for ty indexing the project;
+    later ones do not. Changes to Python files are picked up. Each request is logged
+    to stderr. Commands run with --start-server start one if there is none.
+
+    Parameters
+    ----------
+    root
+        The project directory the server runs in.
+    idle_timeout
+        Stop after this many minutes without a request. Never by default.
+    """
+    seconds = None if idle_timeout is None else idle_timeout * 60
+    server = Server(root, _run_command_line, idle_timeout=seconds)
+    signal.signal(signal.SIGTERM, lambda *_: server.stop())  # so `kill` cleans up
+    print(f"ty-lsp: starting the server for {root.resolve()}", file=sys.stderr)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    except RuntimeError as exc:
+        print(f"ty-lsp: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+@app.command(group=_SERVER)
+def stop(*, root: Path = Path()) -> int:
+    """Stop the server for the project, if one is running.
+
+    Parameters
+    ----------
+    root
+        The project directory the server runs in.
+    """
+    if stop_server(root):
+        print("ty-lsp: stopped the server")
+    else:
+        print("ty-lsp: no server is running")
+    return 0
+
+
 def main() -> None:
     """The ``ty-lsp`` entry point."""
-    sys.exit(app())
+    code = forward(sys.argv[1:])
+    sys.exit(app() if code is None else code)
