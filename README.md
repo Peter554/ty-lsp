@@ -24,13 +24,47 @@ To use it as a Python library, add it to a project instead:
 
 ```console
 $ ty-lsp callers src/shop/pricing.py:12:5 --all
+$ ty-lsp callers shop.pricing:total --all -f text
 ```
 
-Positions are `PATH:LINE:COLUMN`, with 1-based lines and columns.
+There is one command per query (see [Commands](#commands)). Each takes any number of
+queries, and runs them all with one ty server, so give it many at once when you can.
 
-One command per query. Each takes any number of queries as arguments, and can also
-read them from `--file FILE` or, with `--stdin`, from stdin (one per line; blank lines
-and `#` comments are skipped). These can be combined.
+### Queries
+
+A query says where to look. It has one of these forms:
+
+| Form               | Meaning                                                                      | Taken by                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `callers`, `callees`, `subtypes`, `supertypes` |
+| `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | the same, and `symbol`                                                                        |
+| `PATH`             | A file                                                                       | `symbols`                                                                                     |
+| `MODULE`           | A dotted module path, such as `shop.models`                                  | `file`                                                                                        |
+
+`PATH` is either:
+
+- a **file path**, such as `src/shop/models.py`. A relative path is relative to the
+  current directory.
+- a **dotted module path**, such as `shop.models`, which ty looks up as it would an
+  `import`. It gives the module's file (`shop/models.py`), or `__init__.py` for a
+  package (`shop`). A file path is anything with a `/` or ending in `.py`.
+
+So these are all the same query:
+
+```console
+$ ty-lsp callers src/shop/models.py:Item.label
+$ ty-lsp callers shop.models:Item.label
+$ ty-lsp callers src/shop/models.py:5:9
+```
+
+A name must be defined exactly once in its file. If it isn't found, or is defined
+several times (for example in `if`/`else` branches), that query fails with an error
+listing the candidates, and you can repeat it with a position.
+
+Queries are given as arguments, and also with `--file FILE` or `--stdin` (one per
+line; blank lines and `#` comments are skipped). These can be combined.
+
+### Output
 
 The output is a JSON list on stdout with one entry per query, in order:
 
@@ -38,7 +72,7 @@ The output is a JSON list on stdout with one entry per query, in order:
 [
   {
     "query": {
-      "raw": "src/shop/app.py:6:12",
+      "raw": "shop.app:6:12",
       "parsed": { "path": "src/shop/app.py", "line": 6, "column": 12 }
     },
     "result": [{ "path": "src/shop/models.py", "line": 9, "column": 5 }]
@@ -46,12 +80,14 @@ The output is a JSON list on stdout with one entry per query, in order:
 ]
 ```
 
-A query that fails has `"error": "..."` instead of `"result"`. The exit code is 1 if
-any query failed and 2 if the input is invalid.
+`raw` is the query as given, and `parsed` is the position it was resolved to. A query
+that fails has `"error": "..."` instead of `"result"`. The exit code is 1 if any query
+failed and 2 if the input is invalid.
 
 With `--format text` (`-f text`) the output is compact text instead, better for agents:
 a `## query` heading per query, then a line per result, with paths relative to the
-current directory.
+current directory. A failed query prints `error: ...` and an empty one prints
+`(none)`.
 
 ```console
 $ ty-lsp callers src/shop/graph.py:4:5 --all -f text
@@ -60,9 +96,9 @@ mid_a src/shop/graph.py:7:5 calls src/shop/graph.py:4:5 at src/shop/graph.py:8:5
 top src/shop/graph.py:15:5 calls src/shop/graph.py:7:5 at src/shop/graph.py:16:5
 ```
 
-A failed query prints `error: ...` and an empty one prints `(none)`.
+### Options
 
-Options for all commands:
+For all commands:
 
 | Option             | Meaning                                                |
 | ------------------ | ------------------------------------------------------ |
@@ -72,13 +108,14 @@ Options for all commands:
 | `--stdin`          | Also read queries from stdin                           |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)          |
 
-Wherever a command takes a position it also takes `PATH:NAME` (as for `symbol`), such
-as `src/shop/models.py:Item.label`, so you don't need to look up the line and column.
-The name must be defined exactly once in the file. If it isn't found, or is defined
-several times (for example in `if`/`else` branches), that query fails with an error
-listing the candidates, and you can repeat it with a position.
+`callers`, `callees`, `subtypes` and `supertypes` return direct relations only. Add
+`--all` for indirect ones too, or `--max-depth N` to follow N levels (implies `--all`).
+`callees` also takes `--within DIR`: callees outside it are listed, but what they call
+is not followed (implies `--all`).
 
-### `definition`
+### Commands
+
+#### `definition`
 
 Where each name is defined.
 
@@ -86,7 +123,7 @@ Where each name is defined.
 $ ty-lsp definition src/shop/app.py:6:12
 ```
 
-### `type-definition`
+#### `type-definition`
 
 Where the type of each name or expression is defined (the class, not the variable).
 
@@ -94,7 +131,7 @@ Where the type of each name or expression is defined (the class, not the variabl
 $ ty-lsp type-definition src/shop/app.py:7:5
 ```
 
-### `references`
+#### `references`
 
 Every reference to each name except its definition: calls, other uses, annotations and
 imports.
@@ -103,25 +140,34 @@ imports.
 $ ty-lsp references src/shop/models.py:9:5
 ```
 
-### `symbols`
+#### `file`
 
-Every symbol (function, class, method, variable) defined in each file. Takes file
-paths, not positions.
+The file of each module, given a dotted module path. A package gives its
+`__init__.py`. The result is a list with the one path, like the other commands.
+
+```console
+$ ty-lsp file shop.models
+```
+
+#### `symbols`
+
+Every symbol (function, class, method, variable) defined in each file. Takes a `PATH`.
 
 ```console
 $ ty-lsp symbols src/shop/models.py
+$ ty-lsp symbols shop.models
 ```
 
-### `symbol`
+#### `symbol`
 
-Where a named symbol is defined in a file. Takes `PATH:NAME`; use dots for nested
-names.
+Where a named symbol is defined in a file. Takes `PATH:NAME`. This gives the position
+that the other commands take.
 
 ```console
 $ ty-lsp symbol src/shop/models.py:Item.label
 ```
 
-### `callers`
+#### `callers`
 
 The functions, methods and classes that call each name, with the call sites.
 
@@ -129,7 +175,7 @@ The functions, methods and classes that call each name, with the call sites.
 $ ty-lsp callers src/shop/pricing.py:12:5
 ```
 
-### `callees`
+#### `callees`
 
 What each function, method or class calls, with the call sites.
 Give several queries and they share one call graph: a function below more than one
@@ -139,7 +185,7 @@ is looked up only once.
 $ ty-lsp callees src/shop/checkout.py:20:5
 ```
 
-### `subtypes`
+#### `subtypes`
 
 The classes that inherit from each class. Only subclasses defined in the project are
 found, not those in the standard library or installed packages.
@@ -148,18 +194,13 @@ found, not those in the standard library or installed packages.
 $ ty-lsp subtypes src/shop/shapes.py:5:7 --all
 ```
 
-### `supertypes`
+#### `supertypes`
 
 The base classes of each class, including `object`.
 
 ```console
 $ ty-lsp supertypes src/shop/shapes.py:12:7
 ```
-
-`callers`, `callees`, `subtypes` and `supertypes` return direct relations only. Add
-`--all` for indirect ones too, or `--max-depth N` to follow N levels (implies `--all`).
-`callees` also takes `--within DIR`: callees outside it are listed, but what they call
-is not followed (implies `--all`).
 
 ## Claude Code
 

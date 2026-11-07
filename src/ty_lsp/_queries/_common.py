@@ -62,16 +62,24 @@ def _to_location(location: LspLocation | LspLocationLink) -> Location:
     return to_location(location.target_uri, location.target_selection_range.start)
 
 
+def parse_locations(result: Any) -> tuple[Location, ...]:
+    """Convert the answer to a definition-like request to 1-based ``Location``s.
+
+    The answer is ``None``, a ``Location``, or a list of ``Location``s or
+    ``LocationLink``s.
+    """
+    if result is None:
+        return ()
+    locations = [result] if isinstance(result, dict) else result
+    return tuple(_to_location(loc) for loc in _LOCATIONS.validate_python(locations))
+
+
 def request_locations(lsp: TyLSP, method: str, query: Location) -> tuple[Location, ...]:
     """The locations the server gives for ``method`` (e.g. ``textDocument/definition``) at ``query``.
 
     Raises what ``capture`` turns into an ``Error``.
     """
-    result: Any = lsp._request(method, position_params(query))
-    if result is None:
-        return ()
-    locations = [result] if isinstance(result, dict) else result
-    return tuple(_to_location(loc) for loc in _LOCATIONS.validate_python(locations))
+    return parse_locations(lsp._request(method, position_params(query)))
 
 
 # Call and type hierarchies

@@ -7,7 +7,7 @@ description: Answers code navigation questions about Python code with ty - where
 
 `ty-lsp` queries Python code with ty's language server. Prefer it over grep for questions about definitions, usages, call graphs and class hierarchies: results follow imports, re-exports and inferred types.
 
-**Always use `-f text` (`--format text`) for compact, agent-readable output.** Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage).
+**Always use `-f text` (`--format text`) for compact, agent-readable output.** Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage). `PATH` is a file path or a dotted module path such as `shop.models` (so `shop.models:Item.label` is the same as `src/shop/models.py:Item.label`).
 
 ## Commands
 
@@ -15,6 +15,7 @@ description: Answers code navigation questions about Python code with ty - where
 ty-lsp definition PATH:LINE:COLUMN        # Where the name is defined
 ty-lsp type-definition PATH:LINE:COLUMN   # Where the name's type (class) is defined
 ty-lsp references PATH:LINE:COLUMN        # All references, except the definition
+ty-lsp file MODULE                        # The file of a dotted module path, e.g. shop.models
 ty-lsp symbols PATH                       # Every symbol defined in a file
 ty-lsp symbol PATH:NAME                   # Where a symbol is defined, e.g. src/a.py:Class.method
 ty-lsp callers PATH:LINE:COLUMN           # Direct callers, with call sites
@@ -29,7 +30,7 @@ ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 
 ## Tips
 
-- Instead of `PATH:LINE:COLUMN`, any position command accepts `PATH:NAME` for a symbol defined in the file, e.g. `ty-lsp callers src/a.py:Class.method`. If the name is not found or is defined more than once, that query fails with the candidate positions - repeat it with one of them.
+- Instead of `PATH:LINE:COLUMN`, any position command accepts `PATH:NAME` for a symbol defined in the file, e.g. `ty-lsp callers src/a.py:Class.method` or `ty-lsp callers pkg.mod:Class.method` (no need to look up the file or the line). If the name is not found or is defined more than once, that query fails with the candidate positions - repeat it with one of them.
 - To find positions, use `symbols PATH` or `symbol PATH:NAME`, which give the location of names.
 - Pass several queries in one run - the server starts once: `ty-lsp references a.py:3:5 b.py:8:1`. Or use `--stdin` / `--file FILE` with one query per line.
 - Prefer `callers`/`callees` without `--all` first; the indirect graph (especially callees, which include the standard library) can be large. Limit it with `--max-depth` or `--within`.

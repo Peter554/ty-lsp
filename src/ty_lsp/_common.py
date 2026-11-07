@@ -62,7 +62,7 @@ def to_location(uri: str, position: LspPosition) -> Location:
 
 
 class PathError(Exception):
-    """A query names a path that is not an existing file."""
+    """A query names a file or module that does not exist."""
 
 
 def check_file(path: Path) -> None:

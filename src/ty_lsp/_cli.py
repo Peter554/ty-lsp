@@ -14,15 +14,19 @@ With ``--format text`` the output is compact text for agents instead: a
 ``## query`` heading per query, then a line per result (``error: ...`` if it failed,
 ``(none)`` if empty). The exit code is the same.
 
-Where a query takes a position (``PATH:LINE:COLUMN``) it can take ``PATH:NAME``
-instead, such as ``src/a.py:Class.method``. The name must be defined exactly once in
-the file: no match, or several, is an error for that query only.
+A query is ``PATH:LINE:COLUMN`` (1-based) or ``PATH:NAME``, such as
+``src/a.py:Class.method``, where the name must be defined exactly once in the file
+(no match, or several, is an error for that query only). ``symbols`` takes just a
+``PATH``. ``PATH`` is a file path, or a dotted module path such as ``shop.models``,
+which ty looks up. ``file`` takes just a dotted module path, and gives its file.
 
 The exit code is 1 if any query failed, and 2 if the input is invalid.
 """
 
 import dataclasses
 import json
+import keyword
+import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -41,6 +45,7 @@ from ._queries._calls._find_callers import (
     find_direct_callers,
 )
 from ._queries._definitions._find_definition import find_definition
+from ._queries._definitions._find_file import find_file
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
 from ._queries._symbols._find_symbol import SymbolQuery, find_symbol
@@ -59,7 +64,12 @@ from ._ty_lsp import TyLSP
 
 app = cyclopts.App(
     name="ty-lsp",
-    help="Query Python code with ty's language server.",
+    help=(
+        "Query Python code with ty's language server.\n\n"
+        "Queries are PATH:LINE:COLUMN (1-based) or PATH:NAME (such as "
+        "src/a.py:Class.method); 'symbols' takes just a PATH, and 'file' a dotted module path. PATH is a "
+        "file path or a dotted module path (shop.models)."
+    ),
     help_format="plaintext",
 )
 
@@ -105,11 +115,41 @@ def parse_target(text: str) -> Location | SymbolQuery:
     raise InputError(f"expected PATH:LINE:COLUMN or PATH:NAME, got {text!r}")
 
 
+def is_module_path(path: Path) -> bool:
+    """Whether ``path`` is a dotted module path (``pkg.mod``), not a file path.
+
+    A file path has a separator or ends in ``.py``; a module path is only names.
+    """
+    text = str(path)
+    return (
+        "/" not in text
+        and os.sep not in text
+        and not text.endswith((".py", ".pyi"))
+        and all(p.isidentifier() and not keyword.iskeyword(p) for p in text.split("."))
+    )
+
+
+def resolve_file(lsp: TyLSP, path: Path) -> Result[Path]:
+    """``path`` as a file path: a dotted module path is looked up with ty."""
+    return find_file(lsp, str(path)) if is_module_path(path) else path
+
+
+def resolve_symbol(lsp: TyLSP, query: SymbolQuery) -> Result[SymbolQuery]:
+    """``query`` with its path as a file path."""
+    path = resolve_file(lsp, query.path)
+    if isinstance(path, Error):
+        return path
+    return query.model_copy(update={"path": path})
+
+
 def resolve_target(lsp: TyLSP, target: Location | SymbolQuery) -> Result[Location]:
     """The position of ``target``; a name must be defined exactly once in its file."""
+    path = resolve_file(lsp, target.path)
+    if isinstance(path, Error):
+        return path
     if isinstance(target, Location):
-        return target
-    found = find_symbol(lsp, target)
+        return target.model_copy(update={"path": path})
+    found = find_symbol(lsp, target.model_copy(update={"path": path}))
     if isinstance(found, Error):
         return found
     where = f"{target.path}:{target.name}"
@@ -137,10 +177,6 @@ def _callees_many(
             for q in queries
         ]
     return [graph.callees_of(q) for q in queries]
-
-
-def _identity[Q](lsp: TyLSP, query: Q) -> Q:
-    return query
 
 
 @cyclopts.Parameter(name="*")
@@ -191,17 +227,21 @@ def _read_queries(args: Sequence[str], options: Options) -> list[str]:
 def _text_line(item: object) -> str:
     """One result as a line of text. Paths are relative to the cwd where possible."""
 
-    def at(location: Location) -> str:
+    def rel(path: Path) -> Path:
         try:
-            path = location.path.relative_to(Path.cwd())
+            return path.relative_to(Path.cwd())
         except ValueError:
-            path = location.path
-        return f"{path}:{location.line}:{location.column}"
+            return path
+
+    def at(location: Location) -> str:
+        return f"{rel(location.path)}:{location.line}:{location.column}"
 
     def sites(call_sites: Sequence[Location]) -> str:
         return " at " + ", ".join(map(at, call_sites)) if call_sites else ""
 
     match item:
+        case Path():
+            return str(rel(item))
         case Location():
             return at(item)
         case Caller():
@@ -319,6 +359,28 @@ def references(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     return _run(queries, options, parse_target, resolve_target, find_references)
 
 
+def _identity[Q](lsp: TyLSP, query: Q) -> Q:
+    return query
+
+
+def _file_of(lsp: TyLSP, module: str) -> Result[tuple[Path, ...]]:
+    """``find_file`` with a list for a result, like the other commands."""
+    path = find_file(lsp, module)
+    return path if isinstance(path, Error) else (path,)
+
+
+@app.command
+def file(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
+    """The file of each module.
+
+    Parameters
+    ----------
+    queries
+        A dotted module path, such as shop.models. A package gives its __init__.py.
+    """
+    return _run(queries, options, str.strip, _identity, _file_of)
+
+
 @app.command
 def symbols(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     """Every symbol defined in each file.
@@ -328,7 +390,7 @@ def symbols(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     queries
         PATH of a Python file.
     """
-    return _run(queries, options, parse_path, _identity, list_symbols)
+    return _run(queries, options, parse_path, resolve_file, list_symbols)
 
 
 @app.command
@@ -340,7 +402,7 @@ def symbol(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
     queries
         PATH:NAME, where NAME may be dotted (Class.method).
     """
-    return _run(queries, options, parse_symbol, _identity, find_symbol)
+    return _run(queries, options, parse_symbol, resolve_symbol, find_symbol)
 
 
 @app.command

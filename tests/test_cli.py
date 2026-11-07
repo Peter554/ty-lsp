@@ -295,3 +295,77 @@ def test_callees_without_all_are_direct_only(cli: Any) -> None:
     _, everything = cli("callees", top, "--all")
     assert direct == depth_one
     assert len(direct[0]["result"]) == 2 < len(everything[0]["result"])
+
+
+def test_dotted_module_paths_are_looked_up(cli: Any) -> None:
+    graph = PROJECT / "shop" / "graph.py"
+    leaf = find(graph, "leaf()")
+    _, by_file = cli("callers", f"{graph}:leaf")
+    code, by_module = cli("callers", "shop.graph:leaf")
+    assert code == 0
+    assert by_module[0]["result"] == by_file[0]["result"]
+    assert by_module[0]["query"] == {
+        "raw": "shop.graph:leaf",
+        "parsed": {"path": str(graph), "line": leaf.line, "column": leaf.column},
+    }
+
+
+def test_dotted_module_paths_for_every_kind_of_query(cli: Any) -> None:
+    models = PROJECT / "shop" / "models.py"
+    use = find(models, "make_item")
+    _, out = cli("symbol", "shop.models:make_item")
+    assert out[0]["result"] == [
+        {"path": str(models), "line": use.line, "column": use.column}
+    ]
+    _, out = cli("symbols", "shop.models", "shop.inventory")
+    assert "make_item" in [s["name"] for s in out[0]["result"]]
+    assert out[1]["query"]["raw"] == "shop.inventory"
+    _, out = cli(
+        "definition",
+        f"shop.app:{find(APP, 'make_item(').line}:{find(APP, 'make_item(').column}",
+    )
+    assert out[0]["result"][0]["path"] == str(models)
+
+
+def test_an_unknown_module_is_an_error_for_that_query_only(cli: Any) -> None:
+    code, out = cli("symbol", "shop.nope:x", "shop.models:make_item")
+    assert code == 1
+    assert out[0]["error"] == "module not found: shop.nope"
+    assert "result" in out[1]
+
+
+def test_is_module_path() -> None:
+    from ty_lsp._cli import is_module_path
+
+    for module in ("shop", "shop.models", "a.b.c", "models"):
+        assert is_module_path(Path(module))
+    for file in (
+        "shop/models.py",
+        "models.py",
+        "src/shop",
+        "shop.pyi",
+        "a-b.c",
+    ):
+        assert not is_module_path(Path(file))
+
+
+def test_file_command(cli: Any) -> None:
+    code, out = cli("file", "shop.models", "shop", "shop.nope", "src/shop/models.py")
+    assert code == 1
+    assert out[0]["query"] == {"raw": "shop.models", "parsed": "shop.models"}
+    assert out[0]["result"] == [str(PROJECT / "shop" / "models.py")]
+    assert out[1]["result"] == [str(PROJECT / "shop" / "__init__.py")]
+    assert out[2]["error"] == "module not found: shop.nope"
+    assert out[3]["error"] == "not a dotted module path: 'src/shop/models.py'"
+
+
+def test_file_command_text_output(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(PROJECT)
+    app(
+        ["file", "shop.models", "-f", "text", "--root", str(PROJECT)],
+        exit_on_error=False,
+        result_action="return_value",
+    )
+    assert capfd.readouterr().out == "## shop.models\nshop/models.py\n"

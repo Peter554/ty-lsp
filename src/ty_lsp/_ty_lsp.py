@@ -55,6 +55,9 @@ class TyLSP:
     def __exit__(self, *exc_info: object) -> None:
         self._lsp.close()
 
+    def _notify(self, method: str, params: Any) -> None:
+        self._lsp.notify(method, params)
+
     def _request(self, method: str, params: Any) -> Any:
         return self._lsp.request(method, params)
 
