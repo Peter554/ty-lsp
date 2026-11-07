@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from ty_lsp._cli import app
+from ty_lsp._cli import _relativise, app
 
 from ._support import PROJECT, find
 
@@ -29,6 +29,11 @@ def cli(capfd: pytest.CaptureFixture[str]) -> Any:
     return run
 
 
+def rel(path: Path) -> str:
+    """``path`` as the CLI prints it: relative to the cwd."""
+    return str(path.relative_to(Path.cwd()))
+
+
 def at(location: Any) -> str:
     return f"{location.path}:{location.line}:{location.column}"
 
@@ -40,12 +45,12 @@ def test_queries_from_arguments_give_one_entry_each(cli: Any) -> None:
     assert code == 0
     assert [e["query"]["raw"] for e in out] == [at(use), at(find(APP, "item.label()"))]
     assert out[0]["query"]["parsed"] == {
-        "path": str(use.path),
+        "path": rel(use.path),
         "line": use.line,
         "column": use.column,
     }
     assert out[0]["result"] == [
-        {"path": str(MODELS), "line": target.line, "column": target.column}
+        {"path": rel(MODELS), "line": target.line, "column": target.column}
     ]
 
 
@@ -94,7 +99,7 @@ def test_symbols_and_symbol_take_paths(cli: Any) -> None:
     code, out = cli("symbol", f"{MODELS}:make_item")
     target = find(MODELS, "make_item")
     assert out[0]["result"] == [
-        {"path": str(MODELS), "line": target.line, "column": target.column}
+        {"path": rel(MODELS), "line": target.line, "column": target.column}
     ]
 
 
@@ -144,7 +149,7 @@ def test_missing_file_is_reported_for_that_query_only(cli: Any) -> None:
     assert out[0] == {
         "query": {
             "raw": f"{PROJECT}/nope.py:1:1",
-            "parsed": {"path": f"{PROJECT}/nope.py", "line": 1, "column": 1},
+            "parsed": {"path": rel(PROJECT / "nope.py"), "line": 1, "column": 1},
         },
         "error": f"file not found: {PROJECT}/nope.py",
     }
@@ -153,9 +158,9 @@ def test_missing_file_is_reported_for_that_query_only(cli: Any) -> None:
 
 def test_symbol_queries_are_parsed_too(cli: Any) -> None:
     _, out = cli("symbol", f"{MODELS}:Item.label")
-    assert out[0]["query"]["parsed"] == {"path": str(MODELS), "name": "Item.label"}
+    assert out[0]["query"]["parsed"] == {"path": rel(MODELS), "name": "Item.label"}
     _, out = cli("symbols", str(MODELS))
-    assert out[0]["query"]["parsed"] == str(MODELS)
+    assert out[0]["query"]["parsed"] == rel(MODELS)
 
 
 def test_install_claude_skill_is_a_stub_that_runs_claude_skill_instructions(
@@ -261,7 +266,7 @@ def test_a_name_resolves_to_its_position(cli: Any) -> None:
     assert by_name[0]["result"] == by_position[0]["result"]
     assert by_name[0]["query"] == {
         "raw": f"{graph}:leaf",
-        "parsed": {"path": str(graph), "line": leaf.line, "column": leaf.column},
+        "parsed": {"path": rel(graph), "line": leaf.line, "column": leaf.column},
     }
 
 
@@ -324,7 +329,7 @@ def test_dotted_module_paths_are_looked_up(cli: Any) -> None:
     assert by_module[0]["result"] == by_file[0]["result"]
     assert by_module[0]["query"] == {
         "raw": "shop.graph:leaf",
-        "parsed": {"path": str(graph), "line": leaf.line, "column": leaf.column},
+        "parsed": {"path": rel(graph), "line": leaf.line, "column": leaf.column},
     }
 
 
@@ -333,7 +338,7 @@ def test_dotted_module_paths_for_every_kind_of_query(cli: Any) -> None:
     use = find(models, "make_item")
     _, out = cli("symbol", "shop.models:make_item")
     assert out[0]["result"] == [
-        {"path": str(models), "line": use.line, "column": use.column}
+        {"path": rel(models), "line": use.line, "column": use.column}
     ]
     _, out = cli("symbols", "shop.models", "shop.inventory")
     assert "make_item" in [s["name"] for s in out[0]["result"]]
@@ -342,7 +347,7 @@ def test_dotted_module_paths_for_every_kind_of_query(cli: Any) -> None:
         "definition",
         f"shop.app:{find(APP, 'make_item(').line}:{find(APP, 'make_item(').column}",
     )
-    assert out[0]["result"][0]["path"] == str(models)
+    assert out[0]["result"][0]["path"] == rel(models)
 
 
 def test_an_unknown_module_is_an_error_for_that_query_only(cli: Any) -> None:
@@ -371,8 +376,8 @@ def test_file_command(cli: Any) -> None:
     code, out = cli("file", "shop.models", "shop", "shop.nope", "src/shop/models.py")
     assert code == 1
     assert out[0]["query"] == {"raw": "shop.models", "parsed": "shop.models"}
-    assert out[0]["result"] == [str(PROJECT / "shop" / "models.py")]
-    assert out[1]["result"] == [str(PROJECT / "shop" / "__init__.py")]
+    assert out[0]["result"] == [rel(PROJECT / "shop" / "models.py")]
+    assert out[1]["result"] == [rel(PROJECT / "shop" / "__init__.py")]
     assert out[2]["error"] == "module not found: shop.nope"
     assert out[3]["error"] == "not a dotted module path: 'src/shop/models.py'"
 
@@ -399,3 +404,12 @@ def test_decorated_by_command(cli: Any) -> None:
     names = [symbol["name"] for symbol in out[0]["result"]]
     assert {"post", "cached", "Archive"} <= set(names)
     assert set(out[0]["result"][0]) == {"name", "location", "start"}
+
+
+def test_paths_outside_the_cwd_stay_absolute(tmp_path: Path) -> None:
+    inside = Path.cwd() / "src" / "a.py"
+    data = {"query": [{"path": inside}, (tmp_path / "b.py",)], "n": 1}
+    assert _relativise(data) == {
+        "query": [{"path": str(Path("src") / "a.py")}, [str(tmp_path / "b.py")]],
+        "n": 1,
+    }

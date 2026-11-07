@@ -78,8 +78,9 @@ The output is a JSON list on stdout with one entry per query, in order:
 ]
 ```
 
-`raw` is the query as given, and `parsed` is the position it was resolved to. A query
-that fails has `"error": "..."` instead of `"result"`. The exit code is 1 if any query
+`raw` is the query as given, and `parsed` is the position it was resolved to. Paths in
+`parsed` and in the results are relative to the current directory, unless they are
+outside it. A query that fails has `"error": "..."` instead of `"result"`. The exit code is 1 if any query
 failed and 2 if the input is invalid.
 
 With `--format text` (`-f text`) the output is compact text instead, better for agents:

@@ -8,7 +8,8 @@ in order::
     {"query": {"raw": "src/a.py:3:5", "parsed": {...}}, "error": "..."}
 
 ``raw`` is the query as given, and ``parsed`` is how it was understood, such as
-``{"path": ..., "line": 3, "column": 5}``.
+``{"path": ..., "line": 3, "column": 5}``. Paths in ``parsed`` and in the results are
+relative to the current directory, unless they are outside it.
 
 With ``--format text`` the output is compact text for agents instead: a
 ``## query`` heading per query, then a line per result (``error: ...`` if it failed,
@@ -225,14 +226,30 @@ def _read_queries(args: Sequence[str], options: Options) -> list[str]:
     return queries
 
 
+def _relative(path: Path) -> Path:
+    """``path`` relative to the cwd, or as it is if it is not inside it."""
+    try:
+        return path.relative_to(Path.cwd())
+    except ValueError:
+        return path
+
+
+def _relativise(data: Any) -> Any:
+    """``data`` (dumped from models in Python mode) with every ``Path`` made relative to the cwd."""
+    match data:
+        case Path():
+            return str(_relative(data))
+        case dict():
+            return {key: _relativise(value) for key, value in data.items()}
+        case list() | tuple():
+            return [_relativise(value) for value in data]
+        case _:
+            return data
+
+
 def _text_line(item: object) -> str:
     """One result as a line of text. Paths are relative to the cwd where possible."""
-
-    def rel(path: Path) -> Path:
-        try:
-            return path.relative_to(Path.cwd())
-        except ValueError:
-            return path
+    rel = _relative
 
     def at(location: Location) -> str:
         return f"{rel(location.path)}:{location.line}:{location.column}"
@@ -276,12 +293,12 @@ def _render_json(outcomes: Sequence[tuple[str, Any, Result[Any]]]) -> str:
     entries: list[dict[str, Any]] = []
     for text, parsed, result in outcomes:
         entry: dict[str, Any] = {
-            "query": {"raw": text, "parsed": _JSON.dump_python(parsed, mode="json")}
+            "query": {"raw": text, "parsed": _relativise(_JSON.dump_python(parsed))}
         }
         if isinstance(result, Error):
             entry["error"] = result.message
         else:
-            entry["result"] = _JSON.dump_python(result, mode="json")
+            entry["result"] = _relativise(_JSON.dump_python(result))
         entries.append(entry)
     return json.dumps(entries, indent=2)
 
