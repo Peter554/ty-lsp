@@ -51,7 +51,7 @@ AUTO_IDLE_MINUTES = 5
 
 _NOT_FORWARDED = {
     "serve",
-    "stop",
+    "stop-server",
     "list-servers",
     "claude-skill",
     "install-claude-skill",
