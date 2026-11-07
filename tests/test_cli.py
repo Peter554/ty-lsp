@@ -387,3 +387,15 @@ def test_file_command_text_output(
         result_action="return_value",
     )
     assert capfd.readouterr().out == "## shop.models\nshop/models.py\n"
+
+
+def test_decorated_by_command(cli: Any) -> None:
+    markers = PROJECT / "shop" / "markers.py"
+    internal = find(markers, "def internal")
+    internal = internal.model_copy(update={"column": internal.column + len("def ")})
+    code, out = cli("decorated-by", at(internal), "shop.markers:internal")
+    assert code == 0
+    assert out[0]["result"] == out[1]["result"]
+    names = [symbol["name"] for symbol in out[0]["result"]]
+    assert {"post", "cached", "Archive"} <= set(names)
+    assert set(out[0]["result"][0]) == {"name", "location", "start"}

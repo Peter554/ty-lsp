@@ -48,6 +48,7 @@ from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_file import find_file
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
+from ._queries._symbols._find_decorated_by import find_decorated_by
 from ._queries._symbols._find_symbol import SymbolQuery, find_symbol
 from ._queries._symbols._list_symbols import Symbol, list_symbols
 from ._queries._types._find_subtypes import (
@@ -403,6 +404,19 @@ def symbol(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
         PATH:NAME, where NAME may be dotted (Class.method).
     """
     return _run(queries, options, parse_symbol, resolve_symbol, find_symbol)
+
+
+@app.command(name="decorated-by")
+def decorated_by(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
+    """The functions, methods and classes decorated with each decorator.
+
+    Parameters
+    ----------
+    queries
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of the decorator's name, where it is
+        defined or used.
+    """
+    return _run(queries, options, parse_target, resolve_target, find_decorated_by)
 
 
 @app.command

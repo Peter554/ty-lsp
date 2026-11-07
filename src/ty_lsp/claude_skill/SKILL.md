@@ -18,6 +18,7 @@ ty-lsp references PATH:LINE:COLUMN        # All references, except the definitio
 ty-lsp file MODULE                        # The file of a dotted module path, e.g. shop.models
 ty-lsp symbols PATH                       # Every symbol defined in a file
 ty-lsp symbol PATH:NAME                   # Where a symbol is defined, e.g. src/a.py:Class.method
+ty-lsp decorated-by PATH:LINE:COLUMN      # Functions, methods and classes decorated with a decorator (give the decorator's name)
 ty-lsp callers PATH:LINE:COLUMN           # Direct callers, with call sites
 ty-lsp callers PATH:LINE:COLUMN --all     # Direct and indirect callers
 ty-lsp callees PATH:LINE:COLUMN           # What it calls directly, with call sites
@@ -35,6 +36,7 @@ ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 - Pass several queries in one run - the server starts once: `ty-lsp references a.py:3:5 b.py:8:1`. Or use `--stdin` / `--file FILE` with one query per line.
 - Prefer `callers`/`callees` without `--all` first; the indirect graph (especially callees, which include the standard library) can be large. Limit it with `--max-depth` or `--within`.
 - Read results with care for empty ones: an empty result means ty found nothing, such as a dynamic call it cannot resolve.
+- `decorated-by` on a decorator with several `@overload` definitions: give a position on one of its usages (e.g. the `@name` line), not `PATH:NAME`, which is ambiguous.
 
 ## Output
 

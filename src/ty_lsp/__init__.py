@@ -20,6 +20,7 @@ from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_file import find_file
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
+from ._queries._symbols._find_decorated_by import find_decorated_by
 from ._queries._symbols._find_symbol import SymbolQuery, find_symbol
 from ._queries._symbols._list_symbols import Symbol, list_symbols
 from ._queries._types._find_subtypes import (
@@ -44,6 +45,7 @@ __all__ = [  # noqa: RUF022 (ordered for the docs)
     "find_references",
     "list_symbols",
     "find_symbol",
+    "find_decorated_by",
     "find_direct_callers",
     "find_all_callers",
     "find_direct_callees",

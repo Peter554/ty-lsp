@@ -36,7 +36,7 @@ A query says where to look. It has one of these forms:
 
 | Form               | Meaning                                                                      | Taken by                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `callers`, `callees`, `subtypes`, `supertypes` |
+| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes` |
 | `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | the same, and `symbol`                                                                        |
 | `PATH`             | A file                                                                       | `symbols`                                                                                     |
 | `MODULE`           | A dotted module path, such as `shop.models`                                  | `file`                                                                                        |
@@ -166,6 +166,22 @@ that the other commands take.
 ```console
 $ ty-lsp symbol src/shop/models.py:Item.label
 ```
+
+#### `decorated-by`
+
+The functions, methods and classes decorated with each decorator. Give a position on
+the decorator's name, where it is defined or used. Decorators are matched by what they
+resolve to, so aliases and re-exports count and a different decorator with the same
+name does not. The result is each decorated name's position, which the other commands
+take.
+
+```console
+$ ty-lsp decorated-by src/shop/markers.py:internal
+```
+
+A decorator with several definitions (`@overload`) makes `PATH:NAME` ambiguous, so give
+a position on one of its usages instead. A decorator that is a variable
+(`deco = make_deco()`) finds nothing, because ty does not track calls to variables.
 
 #### `callers`
 
