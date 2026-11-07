@@ -64,7 +64,7 @@ def test_each_query_gives_what_find_all_callees_gives(
     for query in QUERIES:
         alone = find_all_callees(lsp, query, max_depth=max_depth, within=within)
         assert not isinstance(alone, Error)
-        assert graph.callees_of(query) == alone
+        assert graph.all_callees_of(query) == alone
 
 
 def test_the_graph_is_the_callees_of_every_function_reached(lsp: TyLSP) -> None:
@@ -72,7 +72,7 @@ def test_the_graph_is_the_callees_of_every_function_reached(lsp: TyLSP) -> None:
     assert not isinstance(graph, Error)
     assert set(graph.callees) >= {TOP, MID_A, MID_B, LEAF}
     assert [c.name for c in graph.callees[TOP]] == ["mid_a", "mid_b"]
-    assert graph.callees_of(TOP) == find_all_callees(lsp, TOP)
+    assert graph.all_callees_of(TOP) == find_all_callees(lsp, TOP)
 
 
 def test_shared_functions_are_looked_up_once_and_a_level_is_one_batch(
@@ -97,7 +97,7 @@ def test_shared_functions_are_looked_up_once_and_a_level_is_one_batch(
 def test_the_same_query_twice_and_a_name_with_two_definitions(lsp: TyLSP) -> None:
     graph = build_call_graph(lsp, [TOP, TOP])
     assert not isinstance(graph, Error)
-    assert graph.callees_of(TOP) == graph.callees_of(TOP)
+    assert graph.all_callees_of(TOP) == graph.all_callees_of(TOP)
     assert len(graph.roots) == 1
 
 

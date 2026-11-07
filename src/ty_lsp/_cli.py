@@ -177,7 +177,7 @@ def _callees_many(
             find_all_callees(lsp, q, max_depth=max_depth, within=within)
             for q in queries
         ]
-    return [graph.callees_of(q) for q in queries]
+    return [graph.all_callees_of(q) for q in queries]
 
 
 @cyclopts.Parameter(name="*")

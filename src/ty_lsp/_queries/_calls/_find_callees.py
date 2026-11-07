@@ -12,7 +12,7 @@ from ._common import Callee
 def _find(
     lsp: TyLSP, query: Location, max_depth: int | None, within: Path | None
 ) -> tuple[Callee, ...]:
-    return build_graph(lsp, [query], max_depth, within).callees_of(query)
+    return build_graph(lsp, [query], max_depth, within).all_callees_of(query)
 
 
 def find_direct_callees(lsp: TyLSP, query: Location) -> Result[tuple[Callee, ...]]:

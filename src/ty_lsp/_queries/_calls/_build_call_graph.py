@@ -17,7 +17,7 @@ from ._common import Callee, request_callees
 class CallGraph(Frozen):
     """The direct callees of the functions below some starting points.
 
-    Get the callees below each starting point with ``callees_of``.
+    Get the callees below each starting point with ``all_callees_of``.
     """
 
     roots: dict[Location, tuple[Location, ...]]
@@ -30,7 +30,7 @@ class CallGraph(Frozen):
     max_depth: int | None
     within: Path | None
 
-    def callees_of(self, query: Location) -> tuple[Callee, ...]:
+    def all_callees_of(self, query: Location) -> tuple[Callee, ...]:
         """Every callee below the function queried at ``query``, as ``find_all_callees``.
 
         The edges of the call graph in breadth-first order (direct callees first),
@@ -116,7 +116,7 @@ def build_call_graph(
 ) -> Result[CallGraph]:
     """Build the call graph below the functions, methods or classes at ``queries``.
 
-    Each query is a definition or a usage. Use ``CallGraph.callees_of`` to get what
+    Each query is a definition or a usage. Use ``CallGraph.all_callees_of`` to get what
     is below each, which is the same as ``find_all_callees`` for it. Building them
     together is much faster than one by one: a function below several queries is
     looked up once, and each level is sent to the server in one batch.
