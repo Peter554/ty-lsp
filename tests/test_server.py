@@ -11,8 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from ty_lsp._cli import _run_command_line
-from ty_lsp._server import Server, forward, log_path, socket_path, stop
+from ty_lsp._cli import _run_command_line, app
+from ty_lsp._server import (
+    Server,
+    forward,
+    list_servers,
+    log_path,
+    socket_path,
+    stop,
+)
 
 from ._support import PROJECT
 
@@ -131,3 +138,42 @@ def test_the_server_stops_after_the_idle_timeout(tmp_path: Path) -> None:
     thread.join(timeout=30)
     assert not thread.is_alive()
     assert not socket_path(root).exists()
+
+
+def test_list_servers_describes_the_running_servers(project: Path) -> None:
+    (mine,) = [s for s in list_servers() if s.root == project]
+    assert (mine.requests, mine.last_request) == (0, None)
+
+    ask(project, "subtypes", "shop/shapes.py:Polygon")
+    (mine,) = [s for s in list_servers() if s.root == project]
+    assert mine.requests == 1
+    assert mine.last_request is not None
+    assert mine.last_request >= mine.started
+
+
+def test_list_servers_command(project: Path, capfd: pytest.CaptureFixture[str]) -> None:
+    code = app(["list-servers"], exit_on_error=False, result_action="return_value")
+    assert code == 0
+    out = capfd.readouterr().out
+    (line,) = [line for line in out.splitlines() if str(project) in line]
+    assert line.startswith(f"{project}  pid ")
+    assert "0 requests, no requests yet" in line
+
+
+def test_list_servers_is_not_forwarded_to_a_server(project: Path) -> None:
+    assert forward(["list-servers", "--root", str(project)]) is None
+
+
+def test_asking_what_servers_there_are_does_not_keep_one_alive(tmp_path: Path) -> None:
+    root = tmp_path.resolve() / "project"
+    shutil.copytree(PROJECT, root, ignore=shutil.ignore_patterns("__pycache__"))
+    server = Server(root, _run_command_line, idle_timeout=1.0)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    assert server.ready.wait(timeout=30)
+    deadline = time.monotonic() + 30
+    while thread.is_alive() and time.monotonic() < deadline:
+        list_servers()  # more often than the timeout
+        time.sleep(0.1)
+    assert not thread.is_alive()
+    thread.join()

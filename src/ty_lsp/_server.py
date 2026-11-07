@@ -33,6 +33,7 @@ from typing import Any, Literal
 
 import watchfiles
 
+from ._common import Frozen
 from ._ty_lsp import TyLSP
 
 type Run = Callable[[list[str], TyLSP], int]
@@ -48,7 +49,13 @@ _START_TIMEOUT = 60.0
 AUTO_IDLE_MINUTES = 5
 """How long a server started by ``--start-server`` waits for a request before stopping."""
 
-_NOT_FORWARDED = {"serve", "stop", "claude-skill", "install-claude-skill"}
+_NOT_FORWARDED = {
+    "serve",
+    "stop",
+    "list-servers",
+    "claude-skill",
+    "install-claude-skill",
+}
 _KINDS: dict[watchfiles.Change, Literal[1, 2, 3]] = {
     watchfiles.Change.added: 1,
     watchfiles.Change.modified: 2,
@@ -56,10 +63,15 @@ _KINDS: dict[watchfiles.Change, Literal[1, 2, 3]] = {
 }
 
 
+def _socket_dir() -> Path:
+    """The directory of the sockets (and logs) of this user's servers."""
+    return Path(tempfile.gettempdir()) / f"ty-lsp-{os.getuid()}"
+
+
 def socket_path(root: Path) -> Path:
     """Where the server for the project at ``root`` listens."""
     digest = hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]
-    return Path(tempfile.gettempdir()) / f"ty-lsp-{os.getuid()}" / f"{digest}.sock"
+    return _socket_dir() / f"{digest}.sock"
 
 
 def _root_of(argv: Sequence[str]) -> Path:
@@ -77,15 +89,20 @@ def log_path(root: Path) -> Path:
     return socket_path(root).with_suffix(".log")
 
 
-def _connect(root: Path) -> socket.socket | None:
-    """A connection to the server for the project at ``root``, if one is running."""
+def _connect_to(path: Path) -> socket.socket | None:
+    """A connection to the server listening at ``path``, if there is one."""
     conn = socket.socket(socket.AF_UNIX)
     try:
-        conn.connect(str(socket_path(root)))
+        conn.connect(str(path))
     except (FileNotFoundError, ConnectionRefusedError):
         conn.close()
         return None
     return conn
+
+
+def _connect(root: Path) -> socket.socket | None:
+    """A connection to the server for the project at ``root``, if one is running."""
+    return _connect_to(socket_path(root))
 
 
 def _start(root: Path) -> socket.socket | None:
@@ -125,7 +142,6 @@ def _start(root: Path) -> socket.socket | None:
 def _exchange(conn: socket.socket, request: dict[str, Any]) -> dict[str, Any]:
     with conn:
         conn.sendall(json.dumps(request).encode() + b"\n")
-        conn.shutdown(socket.SHUT_WR)
         return json.loads(conn.makefile("rb").read())
 
 
@@ -168,6 +184,40 @@ def stop(root: Path) -> bool:
     return True
 
 
+class ServerInfo(Frozen):
+    """A running server, as it describes itself."""
+
+    root: Path
+    pid: int
+    started: float
+    """When it started: seconds since the epoch."""
+    last_request: float | None
+    """When it last answered a request (seconds since the epoch), or ``None`` if never."""
+    requests: int
+
+
+_INFO_TIMEOUT = 30.0
+"""Seconds to wait for a server to describe itself: it may be busy with a request."""
+
+
+def list_servers() -> list[ServerInfo]:
+    """The servers of this user that are running, in no particular order.
+
+    A server that does not answer in time is left out, as is a socket left behind by
+    a server that died. Asking does not count as a request: it does not keep a server
+    from stopping when idle.
+    """
+    servers: list[ServerInfo] = []
+    for path in _socket_dir().glob("*.sock"):
+        if (conn := _connect_to(path)) is None:
+            continue
+        conn.settimeout(_INFO_TIMEOUT)
+        # A server can stop between our connecting to it and its answering.
+        with contextlib.suppress(OSError, json.JSONDecodeError):
+            servers.append(ServerInfo.model_validate(_exchange(conn, {"info": True})))
+    return servers
+
+
 class _Changes:
     """The Python files changed under ``root`` since they were last taken."""
 
@@ -208,6 +258,9 @@ class Server:
         self._run = run
         self._idle_timeout = idle_timeout
         self._stopped = threading.Event()
+        self._started = time.time()
+        self._last_request: float | None = None
+        self._requests = 0
         self.ready = threading.Event()
         """Set once the server is listening."""
         self.path = socket_path(self._root)
@@ -236,33 +289,44 @@ class Server:
                 _log(f"ready, listening on {self.path}")
                 last_request = time.monotonic()
                 while not self._stopped.is_set():
+                    idle = time.monotonic() - last_request
+                    if self._idle_timeout is not None and idle > self._idle_timeout:
+                        _log(f"no request for {idle / 60:.0f} minutes")
+                        break
                     try:
                         conn, _ = listener.accept()
                     except TimeoutError:
-                        idle = time.monotonic() - last_request
-                        if self._idle_timeout is not None and idle > self._idle_timeout:
-                            _log(f"no request for {idle / 60:.0f} minutes")
-                            break
                         continue
                     with conn:
                         try:
-                            self._answer(conn, lsp, changes)
+                            if self._answer(conn, lsp, changes):
+                                last_request = time.monotonic()
                         except Exception:  # noqa: BLE001 (keep serving)
                             _log("request failed:\n" + traceback.format_exc())
-                    last_request = time.monotonic()
         finally:
             changes.stop()
             self.path.unlink(missing_ok=True)
             _log("stopped")
 
-    def _answer(self, conn: socket.socket, lsp: TyLSP, changes: _Changes) -> None:
+    def _answer(self, conn: socket.socket, lsp: TyLSP, changes: _Changes) -> bool:
+        """Answer one message. Returns whether it was a request (not a stop or a probe)."""
         started = time.monotonic()
         request: dict[str, Any] = json.loads(conn.makefile("rb").readline())
         if request.get("stop"):
             _log("stop requested")
             self.stop()
             conn.sendall(b"{}")
-            return
+            return False
+        if request.get("info"):
+            info = ServerInfo(
+                root=self._root,
+                pid=os.getpid(),
+                started=self._started,
+                last_request=self._last_request,
+                requests=self._requests,
+            )
+            conn.sendall(info.model_dump_json().encode())
+            return False
         time.sleep(_SETTLE)  # let the watcher report a change made just before
         taken = changes.take()
         if taken:
@@ -281,10 +345,13 @@ class Server:
             os.chdir(cwd)
         reply = {"stdout": stdout.getvalue(), "stderr": stderr.getvalue(), "code": code}
         conn.sendall(json.dumps(reply).encode())
+        self._requests += 1
+        self._last_request = time.time()
         _log(
             f"{shlex.join(request['argv'])}  (in {request['cwd']}) -> exit {code} "
             f"in {time.monotonic() - started:.2f}s" + self._describe(taken)
         )
+        return True
 
     def _describe(self, changes: Sequence[tuple[Path, Literal[1, 2, 3]]]) -> str:
         """A note of the file changes sent to ty before a request, for the log."""

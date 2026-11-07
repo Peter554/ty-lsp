@@ -31,6 +31,7 @@ import keyword
 import os
 import signal
 import sys
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -64,7 +65,7 @@ from ._queries._types._find_supertypes import (
     find_all_supertypes,
     find_direct_supertypes,
 )
-from ._server import Server, forward
+from ._server import Server, forward, list_servers
 from ._server import stop as stop_server
 from ._ty_lsp import TyLSP
 
@@ -697,6 +698,35 @@ def stop(*, root: Path = Path()) -> int:
         print("ty-lsp: stopped the server")
     else:
         print("ty-lsp: no server is running")
+    return 0
+
+
+def _age(seconds: float) -> str:
+    """A duration for people: ``45s``, ``12m`` or ``3h``."""
+    if seconds < 90:
+        return f"{seconds:.0f}s"
+    if seconds < 90 * 60:
+        return f"{seconds / 60:.0f}m"
+    return f"{seconds / 3600:.0f}h"
+
+
+@app.command(name="list-servers", group=_SERVER)
+def list_servers_command() -> int:
+    """List the running servers (see 'serve'), one line each."""
+    servers = sorted(list_servers(), key=lambda s: str(s.root))
+    if not servers:
+        print("ty-lsp: no servers are running")
+    now = time.time()
+    for server in servers:
+        last = (
+            "no requests yet"
+            if server.last_request is None
+            else f"last request {_age(now - server.last_request)} ago"
+        )
+        print(
+            f"{server.root}  pid {server.pid}  up {_age(now - server.started)}  "
+            f"{server.requests} requests, {last}"
+        )
     return 0
 
 

@@ -258,6 +258,7 @@ With `--start-server`, a command starts a server in the background if there is n
 so nothing needs to be set up first. It stops after 5 minutes without a request
 (`ty-lsp serve --idle-timeout MINUTES` sets this for one started by hand), and its
 log is `ty-lsp-<uid>/<hash>.log` in the temporary directory. `ty-lsp stop` stops it.
+`ty-lsp list-servers` lists the running servers (their project, process id, age and requests).
 
 A server uses a lot of memory on a large project (several GB on a big monorepo).
 
