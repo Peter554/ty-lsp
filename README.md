@@ -213,6 +213,16 @@ $ ty-lsp install-claude-skill
 This installs it to `~/.claude/skills/ty-lsp/`. Use `--skills-dir` to choose another
 directory, and `--force` to overwrite an existing installation without asking.
 
+The installed `SKILL.md` is a small stub: its body is `` !`ty-lsp claude-skill` ``, which
+Claude Code runs when the skill is used, to get the instructions. So the instructions
+always match the installed `ty-lsp`, and you don't need to install the skill again
+after upgrading it. The stub allows that one command (`allowed-tools`), and needs
+`ty-lsp` on the `PATH`. If it isn't, for example when you use `uvx`, say how to run it:
+
+```console
+$ ty-lsp install-claude-skill --command "uvx --from git+https://github.com/Peter554/ty-lsp ty-lsp"
+```
+
 ## Python API
 
 See the [documentation](https://peter554.github.io/ty-lsp/ty_lsp.html).

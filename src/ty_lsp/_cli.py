@@ -528,26 +528,53 @@ def supertypes(
 _DEFAULT_SKILLS_DIR = Path.home() / ".claude" / "skills"
 
 
+def _skill_parts() -> tuple[str, str]:
+    """The packaged skill file, as its frontmatter and its body."""
+    text = (Path(__file__).parent / "claude_skill" / "SKILL.md").read_text()
+    _, frontmatter, body = text.split("---\n", 2)
+    return frontmatter, body.lstrip("\n")
+
+
+@app.command(name="claude-skill")
+def claude_skill_instructions() -> None:
+    """Print the instructions of the Claude Code skill, for the installed skill to include."""
+    print(_skill_parts()[1], end="")
+
+
 @app.command(name="install-claude-skill")
 def install_claude_skill(
     *,
     skills_dir: Annotated[
         Path, cyclopts.Parameter(name=["--skills-dir", "-d"])
     ] = _DEFAULT_SKILLS_DIR,
+    command: str = "ty-lsp",
     force: Annotated[
         bool, cyclopts.Parameter(name=["--force", "-f"], negative=())
     ] = False,
 ) -> int:
     """Install the ty-lsp skill for Claude Code.
 
+    The installed skill is a stub that runs `ty-lsp claude-skill` whenever the skill
+    is used, to get its instructions. So they stay up to date with the installed
+    ty-lsp, and the skill does not need installing again after an upgrade.
+
     Parameters
     ----------
     skills_dir
         The directory where Claude skills are stored.
+    command
+        How the skill runs ty-lsp. Change it if `ty-lsp` is not on the PATH when
+        Claude runs, such as 'uvx --from git+https://github.com/Peter554/ty-lsp ty-lsp'.
     force
         Overwrite an existing installation without asking.
     """
-    source = Path(__file__).parent / "claude_skill" / "SKILL.md"
+    frontmatter, _ = _skill_parts()
+    # The shell command in the body is run (and must be allowed) when the skill is
+    # used. The description has to stay in the file: it cannot be dynamic.
+    stub = (
+        f"---\n{frontmatter}allowed-tools: Bash({command} *)\n---\n\n"
+        f"!`{command} claude-skill`\n"
+    )
     target = skills_dir / "ty-lsp" / "SKILL.md"
     if target.exists() and not force:
         answer = input(f"Skill already exists at {target}. Overwrite? [y/N] ")
@@ -555,7 +582,7 @@ def install_claude_skill(
             print("Installation cancelled.")
             return 1
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(source.read_text())
+    target.write_text(stub)
     print(f"Installed skill to {target}")
     return 0
 

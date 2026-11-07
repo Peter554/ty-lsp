@@ -158,22 +158,40 @@ def test_symbol_queries_are_parsed_too(cli: Any) -> None:
     assert out[0]["query"]["parsed"] == str(MODELS)
 
 
-def test_install_claude_skill(
+def test_install_claude_skill_is_a_stub_that_runs_claude_skill_instructions(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    def install(*args: str) -> int:
-        return app(
-            ["install-claude-skill", "--skills-dir", str(tmp_path), *args],
-            exit_on_error=False,
-            result_action="return_value",
-        )
+    def run(*args: str) -> int:
+        return app(args, exit_on_error=False, result_action="return_value")
 
-    assert install() == 0
     skill = tmp_path / "ty-lsp" / "SKILL.md"
-    assert skill.read_text().startswith("---\nname: ty-lsp\n")
+    assert run("install-claude-skill", "-d", str(tmp_path)) == 0
+    stub = skill.read_text()
+    assert stub.startswith("---\nname: ty-lsp\ndescription: ")
+    assert "\nallowed-tools: Bash(ty-lsp *)\n---\n\n!`ty-lsp claude-skill`\n" in stub
+    assert "# ty-lsp" not in stub  # the instructions are not in the stub
+
     skill.write_text("changed")
-    assert install("--force") == 0
-    assert skill.read_text().startswith("---\nname: ty-lsp\n")
+    assert run("install-claude-skill", "-d", str(tmp_path), "--force") == 0
+    assert skill.read_text() == stub
+
+    capfd.readouterr()
+    run("claude-skill")
+    instructions = capfd.readouterr().out
+    assert instructions.startswith("# ty-lsp\n")
+    assert "---" not in instructions.splitlines()[0]
+    assert "name: ty-lsp" not in instructions
+
+
+def test_install_claude_skill_with_another_command(tmp_path: Path) -> None:
+    app(
+        ["install-claude-skill", "-d", str(tmp_path), "--command", "uvx ty-lsp"],
+        exit_on_error=False,
+        result_action="return_value",
+    )
+    stub = (tmp_path / "ty-lsp" / "SKILL.md").read_text()
+    assert "allowed-tools: Bash(uvx ty-lsp *)" in stub
+    assert stub.endswith("\n!`uvx ty-lsp claude-skill`\n")
 
 
 def test_install_claude_skill_asks_before_overwriting(
