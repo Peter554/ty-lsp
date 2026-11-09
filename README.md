@@ -98,7 +98,8 @@ top src/shop/graph.py:15:5 calls src/shop/graph.py:7:5 at src/shop/graph.py:16:5
 
 ### Common Options
 
-These are taken by all commands:
+These are taken by all commands, and go after the command name
+(`ty-lsp references a.py:Item -f text`, not `ty-lsp -f text references a.py:Item`):
 
 | Option             | Meaning                                                                  |
 | ------------------ | ------------------------------------------------------------------------ |
