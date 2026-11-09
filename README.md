@@ -35,8 +35,8 @@ A query says where to look. It has one of these forms:
 
 | Form               | Meaning                                                                      | Taken by commands                                                                                                       |
 | ------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes`           |
-| `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | `definition`, `type-definition`, `references`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes`, `symbol` |
+| `PATH:LINE:COLUMN` | A position: the 1-based line and column of a name (a definition or a usage)  | `definition`, `type-definition`, `references`, `implementations`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes` |
+| `PATH:NAME`        | A symbol defined in the file: `Item`, or `Item.label` for one inside another | `definition`, `type-definition`, `references`, `implementations`, `decorated-by`, `callers`, `callees`, `subtypes`, `supertypes`, `symbol` |
 | `PATH`             | A file                                                                       | `symbols`                                                                                                               |
 | `MODULE`           | A dotted module path, such as `shop.models`                                  | `file`                                                                                                                  |
 
@@ -134,6 +134,18 @@ imports.
 
 ```console
 $ ty-lsp references src/shop/models.py:9:5
+```
+
+#### `implementations`
+
+The implementations of each class or method: for a class its subclasses, and for a
+method the methods that override it, at any depth. This is ty's "go to
+implementation", unchanged, so the result can include the class or method itself.
+Classes that only match a `Protocol` structurally, without inheriting from it, are not
+found.
+
+```console
+$ ty-lsp implementations src/shop/models.py:Item.label
 ```
 
 #### `file`

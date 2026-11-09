@@ -18,6 +18,7 @@ from ._queries._calls._find_callees import find_all_callees, find_direct_callees
 from ._queries._calls._find_callers import Caller, find_all_callers, find_direct_callers
 from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_file import find_file
+from ._queries._definitions._find_implementations import find_implementations
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
 from ._queries._symbols._find_decorated_by import find_decorated_by
@@ -43,6 +44,7 @@ __all__ = [  # noqa: RUF022 (ordered for the docs)
     "find_type_definition",
     "find_file",
     "find_references",
+    "find_implementations",
     "list_symbols",
     "find_symbol",
     "find_decorated_by",
