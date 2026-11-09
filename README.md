@@ -106,14 +106,18 @@ These are taken by all commands:
 | `--format`, `-f`   | `json` (default) or `text`                                               |
 | `--file FILE`      | Also read queries from a file                                            |
 | `--stdin`          | Also read queries from stdin                                             |
+| `--filter DIR`     | Keep only results in a directory or file, such as src (repeatable)       |
 | `--exclude DIR`    | Leave out results in a directory or file, such as tests (repeatable)     |
 | `--start-server`   | Use the [server](#server), starting one if needed                        |
 | `--ty-stderr FILE` | Write ty's log to a file (default: discarded)                            |
 
-`--exclude` filters each result by where the thing found is (for `callers`, the caller;
-for `callees`, the callee), not by its call sites. It only filters the output: with
-`--all`, callers, callees and subtypes are still followed through excluded directories.
-A relative path is relative to the current directory.
+`--filter` and `--exclude` filter each result by where the thing found is (for `callers`,
+the caller; for `callees`, the callee), not by its call sites. Given more than once,
+`--filter` keeps results in any of the paths. Together, a result is kept if it is in one
+of the `--filter` paths and in none of the `--exclude` paths, so `--filter src --exclude
+src/legacy` keeps `src` except `src/legacy`. They only filter the output: with `--all`,
+callers, callees and subtypes are still followed through other directories. A relative
+path is relative to the current directory.
 
 ### Commands
 
