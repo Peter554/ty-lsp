@@ -12,14 +12,8 @@ from pathlib import Path
 import pytest
 
 from ty_lsp._cli import _run_command_line, app
-from ty_lsp._server import (
-    Server,
-    forward,
-    list_servers,
-    log_path,
-    socket_path,
-    stop,
-)
+from ty_lsp._server import Server, forward, list_servers, stop
+from ty_lsp._server._common import log_path, socket_path
 
 from ._support import PROJECT
 
