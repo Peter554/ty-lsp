@@ -50,6 +50,7 @@ from ._queries._calls._find_callers import (
 )
 from ._queries._definitions._find_definition import find_definition
 from ._queries._definitions._find_file import find_file
+from ._queries._definitions._find_implementations import find_implementations
 from ._queries._definitions._find_type_definition import find_type_definition
 from ._queries._references._find_references import find_references
 from ._queries._symbols._find_decorated_by import find_decorated_by
@@ -398,6 +399,21 @@ def references(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
         PATH:LINE:COLUMN (1-based) or PATH:NAME of a definition or usage.
     """
     return _run(queries, options, parse_target, resolve_target, find_references)
+
+
+@app.command(group=_QUERIES)
+def implementations(*queries: str, options: Options = _DEFAULT_OPTIONS) -> int:
+    """The implementations of each class or method: subclasses, or overriding methods.
+
+    This is ty's "go to implementation", unchanged: it can include the class or method
+    itself.
+
+    Parameters
+    ----------
+    queries
+        PATH:LINE:COLUMN (1-based) or PATH:NAME of a class or method.
+    """
+    return _run(queries, options, parse_target, resolve_target, find_implementations)
 
 
 def _identity[Q](lsp: TyLSP, query: Q) -> Q:

@@ -1,6 +1,6 @@
 ---
 name: ty-lsp
-description: Answers code navigation questions about Python code with ty - where a name is defined, what references it, who calls a function, what a function calls, and a class's subtypes and supertypes. Use instead of grep when you need exact, type-aware results.
+description: Answers code navigation questions about Python code with ty - where a name is defined, what references it, who calls a function, what a function calls, a class's subtypes and supertypes, and the implementations (overrides) of a method. Use instead of grep when you need exact, type-aware results.
 ---
 
 # ty-lsp
@@ -15,6 +15,7 @@ description: Answers code navigation questions about Python code with ty - where
 ty-lsp definition PATH:LINE:COLUMN        # Where the name is defined
 ty-lsp type-definition PATH:LINE:COLUMN   # Where the name's type (class) is defined
 ty-lsp references PATH:LINE:COLUMN        # All references, except the definition
+ty-lsp implementations PATH:LINE:COLUMN   # Subclasses of a class, or methods overriding a method (may include itself)
 ty-lsp file MODULE                        # The file of a dotted module path, e.g. shop.models
 ty-lsp symbols PATH                       # Every symbol defined in a file
 ty-lsp symbol PATH:NAME                   # Where a symbol is defined, e.g. src/a.py:Class.method

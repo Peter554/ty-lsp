@@ -413,3 +413,12 @@ def test_paths_outside_the_cwd_stay_absolute(tmp_path: Path) -> None:
         "query": [{"path": str(Path("src") / "a.py")}, [str(tmp_path / "b.py")]],
         "n": 1,
     }
+
+
+def test_implementations_command(cli: Any) -> None:
+    renderers = PROJECT / "shop" / "renderers.py"
+    code, out = cli("implementations", "shop.renderers:Renderer.render")
+    assert code == 0
+    assert out[0]["result"] == [
+        {"path": rel(renderers), "line": line, "column": 9} for line in (2, 7, 12)
+    ]
