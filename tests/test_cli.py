@@ -13,6 +13,7 @@ from ._support import PROJECT, find
 
 APP = PROJECT / "shop" / "app.py"
 MODELS = PROJECT / "shop" / "models.py"
+INVENTORY = PROJECT / "shop" / "inventory"
 
 
 @pytest.fixture
@@ -422,3 +423,34 @@ def test_implementations_command(cli: Any) -> None:
     assert out[0]["result"] == [
         {"path": rel(renderers), "line": line, "column": 9} for line in (2, 7, 12)
     ]
+
+
+def test_exclude_leaves_out_results_in_each_directory_or_file(cli: Any) -> None:
+    query = "shop.inventory.stock:Stock"
+    checkout = PROJECT / "shop" / "checkout.py"
+    _, out = cli("references", query)
+    paths = {r["path"] for r in out[0]["result"]}
+    assert rel(checkout) in paths
+    assert rel(INVENTORY / "deep" / "report.py") in paths
+
+    _, out = cli("references", query, "--exclude", str(INVENTORY))
+    assert {r["path"] for r in out[0]["result"]} == {rel(checkout)}
+
+    _, out = cli(
+        "references", query, "--exclude", str(INVENTORY), "--exclude", str(checkout)
+    )
+    assert out[0]["result"] == []
+
+
+def test_exclude_matches_whole_names_not_prefixes(cli: Any) -> None:
+    query = "shop.inventory.stock:Stock"
+    _, out = cli("references", query)
+    _, filtered = cli("references", query, "--exclude", f"{INVENTORY}/aud")
+    assert filtered == out
+
+
+def test_exclude_filters_other_kinds_of_result(cli: Any) -> None:
+    shapes = PROJECT / "shop" / "shapes.py"
+    _, out = cli("subtypes", "shop.shapes:Shape", "--all", "--exclude", str(shapes))
+    # Followed through the excluded file: Triangle is a subtype of Polygon there.
+    assert [r["name"] for r in out[0]["result"]] == ["Triangle"]
