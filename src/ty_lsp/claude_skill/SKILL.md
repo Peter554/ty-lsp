@@ -7,7 +7,7 @@ description: Answers code navigation questions about Python code with ty - where
 
 `ty-lsp` queries Python code with ty's language server. Prefer it over grep for questions about definitions, usages, call graphs and class hierarchies: results follow imports, re-exports and inferred types.
 
-**Always use `-f text` (`--format text`) for compact, agent-readable output.** Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage). `PATH` is a file path or a dotted module path such as `shop.models` (so `shop.models:Item.label` is the same as `src/shop/models.py:Item.label`).
+**Always use `-f text` (`--format text`) for compact, agent-readable output.** Options, including `-f text` and `--start-server`, go **after** the command, never before it: `ty-lsp implementations src/a.py:Base.run -f text --start-server`, not `ty-lsp -f text implementations ...` (that fails with `Unknown command "-f"`). Run it from the project root (or pass `--root DIR`). A position is `PATH:LINE:COLUMN` with **1-based** line and column, pointing at a name (a definition or any usage). `PATH` is a file path or a dotted module path such as `shop.models` (so `shop.models:Item.label` is the same as `src/shop/models.py:Item.label`).
 
 ## Commands
 
