@@ -61,22 +61,7 @@ class LSPClient:
         self._send({"method": method, "params": params})
 
     def request(self, method: str, params: Any) -> Any:
-        self._next_id += 1
-        request_id = self._next_id
-        self._send({"id": request_id, "method": method, "params": params})
-        while True:
-            message = self._read()
-            if "method" in message and "id" in message:
-                # "method" + "id" is a request *from* the server (it expects a reply).
-                # A response to us has "id" but no "method"; a notification has "method"
-                # but no "id".
-                self._reply_to_server_request(message)
-            elif message.get("id") == request_id:
-                # A reply from the server.
-                if "error" in message:
-                    raise ResponseError(f"{method} failed: {message['error']}")
-                return message.get("result")
-            # Anything else (diagnostics, log messages, progress) is ignored.
+        return self.request_many(method, [params], window=1)[0]
 
     def request_many(
         self, method: str, params_list: Sequence[Any], *, window: int = 16
@@ -102,6 +87,9 @@ class LSPClient:
                 sent += 1
             message = self._read()
             if "method" in message and "id" in message:
+                # "method" + "id" is a request *from* the server (it expects a reply).
+                # A response to us has "id" but no "method"; a notification has "method"
+                # but no "id".
                 self._reply_to_server_request(message)
             elif (index := pending.pop(message.get("id"), None)) is not None:
                 if "error" in message:
@@ -109,6 +97,7 @@ class LSPClient:
                 else:
                     results[index] = message.get("result")
                 answered += 1
+            # Anything else (diagnostics, log messages, progress) is ignored.
         if errors:
             index, error = min(errors)
             raise ResponseError(f"{method} failed: {error}")
