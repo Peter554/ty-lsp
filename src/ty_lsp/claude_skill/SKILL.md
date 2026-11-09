@@ -37,6 +37,7 @@ ty-lsp supertypes PATH:LINE:COLUMN        # Base classes of a class
 - **Add `--start-server` to every command.** The first starts a ty server in the background, which makes the rest of your queries in the project much faster (about 0.2-1s instead of 5-10s on a large project), and picks up your edits. It stops by itself after 5 minutes idle; `ty-lsp stop-server` stops it earlier.
 - Pass several queries in one run - the server starts once: `ty-lsp references a.py:3:5 b.py:8:1`. Or use `--stdin` / `--file FILE` with one query per line.
 - Prefer `callers`/`callees` without `--all` first; the indirect graph (especially callees, which include the standard library) can be large. Limit it with `--max-depth` or `--within`.
+- Leave out results from directories you don't care about with `--exclude DIR`, repeatable: `ty-lsp references a.py:Item --exclude tests --exclude scripts`.
 - Read results with care for empty ones: an empty result means ty found nothing, such as a dynamic call it cannot resolve.
 - `decorated-by` on a decorator with several `@overload` definitions: give a position on one of its usages (e.g. the `@name` line), not `PATH:NAME`, which is ambiguous.
 

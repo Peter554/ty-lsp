@@ -214,6 +214,9 @@ class Options:
     root: Path = Path()
     """The project directory the server runs in."""
 
+    exclude: Annotated[tuple[Path, ...], cyclopts.Parameter(negative="")] = ()
+    """Leave out results in this directory (or file), such as tests. Can be given more than once. Only the output is filtered: --all still follows callers, callees and subtypes through it."""
+
     # Never read here: ``_server.forward`` looks for this flag in the raw arguments,
     # before they are parsed. It is declared so that the parser accepts it and the
     # help lists it.
@@ -296,6 +299,31 @@ def _text_line(item: object) -> str:
             raise TypeError(f"cannot render {item!r}")
 
 
+def _item_path(item: object) -> Path:
+    """The path of one result: where the found thing is (not its call sites)."""
+    match item:
+        case Path():
+            return item
+        case Location():
+            return item.path
+        case Caller() | Callee() | Subtype() | Supertype() | Symbol():
+            return item.location.path
+        case _:
+            raise TypeError(f"cannot filter {item!r}")
+
+
+def _exclude(result: Result[Any], excluded: Sequence[Path]) -> Result[Any]:
+    """``result`` without the items under any of the ``excluded`` paths."""
+    if not excluded or isinstance(result, Error):
+        return result
+    dirs = [path.resolve() for path in excluded]
+    return tuple(
+        item
+        for item in result
+        if not any(_item_path(item).resolve().is_relative_to(d) for d in dirs)
+    )
+
+
 def _render_text(outcomes: Sequence[tuple[str, Result[Any]]]) -> str:
     """The outcomes as text: a ``## query`` heading, then a line per result."""
     blocks: list[str] = []
@@ -357,7 +385,8 @@ def _run[Q, R](
                 if isinstance(resolved, Error):
                     outcomes.append((text, q, resolved))
                 else:
-                    outcomes.append((text, resolved, next(answers)))
+                    answer = _exclude(next(answers), options.exclude)
+                    outcomes.append((text, resolved, answer))
     if options.format == "text":
         print(_render_text([(text, result) for text, _, result in outcomes]))
     else:

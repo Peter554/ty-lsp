@@ -100,14 +100,20 @@ top src/shop/graph.py:15:5 calls src/shop/graph.py:7:5 at src/shop/graph.py:16:5
 
 These are taken by all commands:
 
-| Option             | Meaning                                                |
-| ------------------ | ------------------------------------------------------ |
-| `--root DIR`       | The project directory (default: the current directory) |
-| `--format`, `-f`   | `json` (default) or `text`                             |
-| `--file FILE`      | Also read queries from a file                          |
-| `--stdin`          | Also read queries from stdin                           |
-| `--start-server`   | Use the [server](#server), starting one if needed      |
-| `--ty-stderr FILE` | Write ty's log to a file (default: discarded)          |
+| Option             | Meaning                                                                  |
+| ------------------ | ------------------------------------------------------------------------ |
+| `--root DIR`       | The project directory (default: the current directory)                   |
+| `--format`, `-f`   | `json` (default) or `text`                                               |
+| `--file FILE`      | Also read queries from a file                                            |
+| `--stdin`          | Also read queries from stdin                                             |
+| `--exclude DIR`    | Leave out results in a directory or file, such as tests (repeatable)     |
+| `--start-server`   | Use the [server](#server), starting one if needed                        |
+| `--ty-stderr FILE` | Write ty's log to a file (default: discarded)                            |
+
+`--exclude` filters each result by where the thing found is (for `callers`, the caller;
+for `callees`, the callee), not by its call sites. It only filters the output: with
+`--all`, callers, callees and subtypes are still followed through excluded directories.
+A relative path is relative to the current directory.
 
 ### Commands
 
