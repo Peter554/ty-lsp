@@ -214,6 +214,9 @@ class Options:
     root: Path = Path()
     """The project directory the server runs in."""
 
+    filter: Annotated[tuple[Path, ...], cyclopts.Parameter(negative="")] = ()
+    """Keep only results in this directory (or file), such as src. Can be given more than once, to keep results in any of them. Only the output is filtered: --all still follows callers, callees and subtypes outside it."""
+
     exclude: Annotated[tuple[Path, ...], cyclopts.Parameter(negative="")] = ()
     """Leave out results in this directory (or file), such as tests. Can be given more than once. Only the output is filtered: --all still follows callers, callees and subtypes through it."""
 
@@ -312,16 +315,23 @@ def _item_path(item: object) -> Path:
             raise TypeError(f"cannot filter {item!r}")
 
 
-def _exclude(result: Result[Any], excluded: Sequence[Path]) -> Result[Any]:
-    """``result`` without the items under any of the ``excluded`` paths."""
-    if not excluded or isinstance(result, Error):
+def _filter(
+    result: Result[Any], kept: Sequence[Path], excluded: Sequence[Path]
+) -> Result[Any]:
+    """``result`` with only the items under one of the ``kept`` paths (if any are
+    given), and none under the ``excluded`` paths."""
+    if (not kept and not excluded) or isinstance(result, Error):
         return result
-    dirs = [path.resolve() for path in excluded]
-    return tuple(
-        item
-        for item in result
-        if not any(_item_path(item).resolve().is_relative_to(d) for d in dirs)
-    )
+    kept_dirs = [path.resolve() for path in kept]
+    excluded_dirs = [path.resolve() for path in excluded]
+
+    def keep(item: object) -> bool:
+        path = _item_path(item).resolve()
+        if kept_dirs and not any(path.is_relative_to(d) for d in kept_dirs):
+            return False
+        return not any(path.is_relative_to(d) for d in excluded_dirs)
+
+    return tuple(item for item in result if keep(item))
 
 
 def _render_text(outcomes: Sequence[tuple[str, Result[Any]]]) -> str:
@@ -385,7 +395,7 @@ def _run[Q, R](
                 if isinstance(resolved, Error):
                     outcomes.append((text, q, resolved))
                 else:
-                    answer = _exclude(next(answers), options.exclude)
+                    answer = _filter(next(answers), options.filter, options.exclude)
                     outcomes.append((text, resolved, answer))
     if options.format == "text":
         print(_render_text([(text, result) for text, _, result in outcomes]))

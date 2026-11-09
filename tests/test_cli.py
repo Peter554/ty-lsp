@@ -454,3 +454,38 @@ def test_exclude_filters_other_kinds_of_result(cli: Any) -> None:
     _, out = cli("subtypes", "shop.shapes:Shape", "--all", "--exclude", str(shapes))
     # Followed through the excluded file: Triangle is a subtype of Polygon there.
     assert [r["name"] for r in out[0]["result"]] == ["Triangle"]
+
+
+def test_filter_keeps_only_results_in_any_of_the_directories_or_files(
+    cli: Any,
+) -> None:
+    query = "shop.inventory.stock:Stock"
+    checkout = PROJECT / "shop" / "checkout.py"
+    _, out = cli("references", query, "--filter", str(INVENTORY))
+    paths = {r["path"] for r in out[0]["result"]}
+    assert paths
+    assert all(Path(p).is_relative_to(rel(INVENTORY)) for p in paths)
+
+    _, out = cli(
+        "references", query, "--filter", str(INVENTORY), "--filter", str(checkout)
+    )
+    assert {r["path"] for r in out[0]["result"]} == paths | {rel(checkout)}
+
+
+def test_filter_with_exclude_keeps_a_directory_except_part_of_it(cli: Any) -> None:
+    query = "shop.inventory.stock:Stock"
+    deep = INVENTORY / "deep"
+    _, out = cli(
+        "references", query, "--filter", str(INVENTORY), "--exclude", str(deep)
+    )
+    paths = {r["path"] for r in out[0]["result"]}
+    assert paths
+    assert all(Path(p).is_relative_to(rel(INVENTORY)) for p in paths)
+    assert not any(Path(p).is_relative_to(rel(deep)) for p in paths)
+
+
+def test_filter_matches_whole_names_not_prefixes(cli: Any) -> None:
+    _, out = cli(
+        "references", "shop.inventory.stock:Stock", "--filter", f"{INVENTORY}/aud"
+    )
+    assert out[0]["result"] == []
