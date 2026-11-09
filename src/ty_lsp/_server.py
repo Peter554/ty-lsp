@@ -20,6 +20,7 @@ import json
 import os
 import shlex
 import socket
+import socketserver
 import subprocess
 import sys
 import tempfile
@@ -247,6 +248,31 @@ class _Changes:
         self._thread.join()
 
 
+class _Handler(socketserver.StreamRequestHandler):
+    """Reads one line of JSON from a connection and writes back the reply."""
+
+    def handle(self) -> None:
+        assert isinstance(self.server, _Listener)
+        request = json.loads(self.rfile.readline())
+        self.wfile.write(self.server.answer(request))
+
+
+class _Listener(socketserver.UnixStreamServer):
+    """Listens on a Unix socket and answers each connection with ``answer``.
+
+    Connections are answered one at a time: requests change the working directory
+    and redirect stdout, and there is one ty server.
+    """
+
+    def __init__(self, path: Path, answer: Callable[[dict[str, Any]], bytes]) -> None:
+        self.answer = answer
+        super().__init__(str(path), _Handler)
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        # The default prints to stderr without the time; keep serving either way.
+        _log("request failed:\n" + traceback.format_exc())
+
+
 class Server:
     """Answers command lines sent by ``forward``, one at a time, until stopped."""
 
@@ -260,6 +286,8 @@ class Server:
         self._stopped = threading.Event()
         self._started = time.time()
         self._last_request: float | None = None
+        self._idle_since = time.monotonic()
+        """When the last request was answered (or the server started), for idleness."""
         self._requests = 0
         self.ready = threading.Event()
         """Set once the server is listening."""
@@ -281,42 +309,34 @@ class Server:
             self.path.unlink()  # left behind by a server that died
         changes = _Changes(self._root)
         try:
-            with TyLSP(self._root) as lsp, socket.socket(socket.AF_UNIX) as listener:
-                listener.bind(str(self.path))
-                listener.listen()
-                listener.settimeout(0.2)
+            with (
+                TyLSP(self._root) as lsp,
+                _Listener(
+                    self.path, lambda r: self._answer(r, lsp, changes)
+                ) as listener,
+            ):
+                listener.timeout = 0.2  # how often to check for a stop or idleness
                 self.ready.set()
                 _log(f"ready, listening on {self.path}")
-                last_request = time.monotonic()
+                self._idle_since = time.monotonic()
                 while not self._stopped.is_set():
-                    idle = time.monotonic() - last_request
+                    idle = time.monotonic() - self._idle_since
                     if self._idle_timeout is not None and idle > self._idle_timeout:
                         _log(f"no request for {idle / 60:.0f} minutes")
                         break
-                    try:
-                        conn, _ = listener.accept()
-                    except TimeoutError:
-                        continue
-                    with conn:
-                        try:
-                            if self._answer(conn, lsp, changes):
-                                last_request = time.monotonic()
-                        except Exception:  # noqa: BLE001 (keep serving)
-                            _log("request failed:\n" + traceback.format_exc())
+                    listener.handle_request()  # one request, or none in the timeout
         finally:
             changes.stop()
             self.path.unlink(missing_ok=True)
             _log("stopped")
 
-    def _answer(self, conn: socket.socket, lsp: TyLSP, changes: _Changes) -> bool:
-        """Answer one message. Returns whether it was a request (not a stop or a probe)."""
+    def _answer(self, request: dict[str, Any], lsp: TyLSP, changes: _Changes) -> bytes:
+        """The reply to one message: a request, a stop or a probe."""
         started = time.monotonic()
-        request: dict[str, Any] = json.loads(conn.makefile("rb").readline())
         if request.get("stop"):
             _log("stop requested")
             self.stop()
-            conn.sendall(b"{}")
-            return False
+            return b"{}"
         if request.get("info"):
             info = ServerInfo(
                 root=self._root,
@@ -325,8 +345,7 @@ class Server:
                 last_request=self._last_request,
                 requests=self._requests,
             )
-            conn.sendall(info.model_dump_json().encode())
-            return False
+            return info.model_dump_json().encode()
         time.sleep(_SETTLE)  # let the watcher report a change made just before
         taken = changes.take()
         if taken:
@@ -344,14 +363,14 @@ class Server:
         finally:
             os.chdir(cwd)
         reply = {"stdout": stdout.getvalue(), "stderr": stderr.getvalue(), "code": code}
-        conn.sendall(json.dumps(reply).encode())
         self._requests += 1
         self._last_request = time.time()
+        self._idle_since = time.monotonic()
         _log(
             f"{shlex.join(request['argv'])}  (in {request['cwd']}) -> exit {code} "
             f"in {time.monotonic() - started:.2f}s" + self._describe(taken)
         )
-        return True
+        return json.dumps(reply).encode()
 
     def _describe(self, changes: Sequence[tuple[Path, Literal[1, 2, 3]]]) -> str:
         """A note of the file changes sent to ty before a request, for the log."""
